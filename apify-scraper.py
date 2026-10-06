@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Parkrun scraper: deploys a minimal actor to Apify's cloud to bypass AWS WAF."""
+"""Parkrun scraper: Python Playwright + Apify residential proxy to bypass AWS WAF."""
 import sys
 import json
 import os
-import requests
 import time
 import traceback
 from datetime import datetime
@@ -14,70 +13,6 @@ ATHLETES = {
 }
 
 PARKRUN_AJAX = 'https://www.parkrun.org.uk/results/athleteresultshistory/'
-APIFY_BASE = 'https://api.apify.com/v2'
-ACTOR_NAME = 'parkrun-data-fetcher'
-
-# Runs on Apify's servers (trusted IPs that bypass parkrun WAF)
-ACTOR_JS = """\
-import { Actor } from 'apify';
-import { ProxyAgent, fetch as undiciFetch } from 'undici';
-
-await Actor.init();
-const { athleteIds, baseUrl, headers } = await Actor.getInput();
-const results = {};
-
-// Use Apify residential proxy to bypass parkrun WAF
-let proxyConfiguration = null;
-try {
-    proxyConfiguration = await Actor.createProxyConfiguration({ groups: ['RESIDENTIAL'] });
-    console.log('Residential proxy configuration created');
-} catch (err) {
-    console.log(`Proxy config failed: ${err.message} — falling back to direct`);
-}
-
-for (const athleteId of athleteIds) {
-    console.log(`Fetching athlete ${athleteId}...`);
-    const allRuns = [];
-    let offset = 0;
-    while (true) {
-        const url = `${baseUrl}?athleteNumber=${athleteId}&offset=${offset}&nbRecords=100`;
-        let resp;
-        try {
-            if (proxyConfiguration) {
-                const proxyUrl = await proxyConfiguration.newUrl();
-                const dispatcher = new ProxyAgent({ uri: proxyUrl });
-                resp = await undiciFetch(url, { headers, dispatcher });
-            } else {
-                resp = await fetch(url, { headers });
-            }
-        } catch (fetchErr) {
-            console.log(`  fetch error: ${fetchErr.message}`);
-            break;
-        }
-        console.log(`  offset=${offset}: HTTP ${resp.status}`);
-        if (!resp.ok) { console.log('  body:', (await resp.text()).slice(0, 500)); break; }
-        const data = await resp.json();
-        const runs = data?.data?.Results ?? [];
-        console.log(`  got ${runs.length} runs`);
-        allRuns.push(...runs);
-        if (runs.length < 100) break;
-        offset += 100;
-    }
-    results[athleteId] = allRuns;
-    console.log(`Total for ${athleteId}: ${allRuns.length}`);
-}
-
-await Actor.setValue('OUTPUT', results);
-await Actor.exit();
-"""
-
-PACKAGE_JSON = json.dumps({
-    "name": "parkrun-data-fetcher",
-    "version": "0.0.1",
-    "type": "module",
-    "scripts": {"start": "node src/main.js"},
-    "dependencies": {"apify": "^3.0.0", "undici": "^6.0.0"}
-})
 
 LOG = []
 
@@ -95,187 +30,51 @@ def save_debug(extra=None):
         json.dump(debug, f, indent=2, default=str)
 
 
-def _auth_headers(token):
-    return {'Authorization': f'Bearer {token}'}
+def fetch_athlete_runs(page, athlete_id):
+    """Fetch all runs for an athlete using an existing Playwright page."""
+    all_runs = []
+    offset = 0
 
+    while True:
+        url = (f"{PARKRUN_AJAX}?athleteNumber={athlete_id}"
+               f"&offset={offset}&nbRecords=100")
+        log(f"[*]   GET {url}")
 
-def api_get(path, token):
-    r = requests.get(f'{APIFY_BASE}{path}', headers=_auth_headers(token), timeout=30)
-    r.raise_for_status()
-    return r.json()
-
-
-def api_post(path, token, data=None, extra_params=None):
-    params = extra_params or {}
-    r = requests.post(
-        f'{APIFY_BASE}{path}',
-        params=params,
-        headers=_auth_headers(token),
-        json=data,
-        timeout=60
-    )
-    if not r.ok:
-        log(f"[-] API error {r.status_code}: {r.text[:300]}")
-    r.raise_for_status()
-    return r.json()
-
-
-def api_put(path, token, data=None):
-    r = requests.put(
-        f'{APIFY_BASE}{path}',
-        headers=_auth_headers(token),
-        json=data,
-        timeout=60
-    )
-    if not r.ok:
-        log(f"[-] API error {r.status_code}: {r.text[:300]}")
-    r.raise_for_status()
-    return r.json()
-
-
-SOURCE_FILES_PAYLOAD = {
-    'versionNumber': '0.0',
-    'sourceType': 'SOURCE_FILES',
-    'buildTag': 'latest',
-    'sourceFiles': [
-        {'name': 'src/main.js', 'format': 'TEXT', 'content': ACTOR_JS},
-        {'name': 'package.json', 'format': 'TEXT', 'content': PACKAGE_JSON},
-    ]
-}
-
-
-def build_actor(token, actor_id):
-    """Upload/update source code and build the actor. Returns actor_id."""
-    try:
-        api_post(f'/acts/{actor_id}/versions', token, SOURCE_FILES_PAYLOAD)
-        log("[+] Source version created")
-    except requests.exceptions.HTTPError as e:
-        if e.response is not None and e.response.status_code == 403 and 'version-already-exists' in (e.response.text or ''):
-            log("[*] Version 0.0 already exists — updating via PUT")
-            api_put(f'/acts/{actor_id}/versions/0.0', token, SOURCE_FILES_PAYLOAD)
-            log("[+] Source version updated")
-        else:
-            raise
-    log("[+] Source uploaded")
-
-    build_id = api_post(f'/acts/{actor_id}/builds', token, extra_params={
-        'version': '0.0', 'tag': 'latest'
-    })['data']['id']
-    log(f"[*] Building actor (id={build_id})...")
-
-    for i in range(60):
-        time.sleep(10)
-        build = api_get(f'/actor-builds/{build_id}', token)['data']
-        status = build['status']
-        log(f"[*]   build status: {status} ({(i+1)*10}s)")
-        if status == 'SUCCEEDED':
-            log("[+] Build succeeded")
-            return actor_id
-        if status in ['FAILED', 'ABORTED', 'TIMED-OUT']:
-            raise Exception(f"Build failed: {status}\n{build.get('log', '')}")
-
-    raise Exception("Build timed out")
-
-
-def get_or_create_actor(token):
-    """Return actor ID with a valid latest build, creating/rebuilding if needed."""
-    # Check for existing actor
-    actors = api_get('/acts?my=true&limit=100', token).get('data', {}).get('items', [])
-    actor_id = None
-    for actor in actors:
-        if actor['name'] == ACTOR_NAME:
-            actor_id = actor['id']
-            log(f"[+] Found existing actor: {actor_id}")
-            break
-
-    if actor_id:
-        log(f"[*] Updating source and rebuilding actor")
-        return build_actor(token, actor_id)
-
-    # Create actor from scratch
-    log("[*] Creating Apify actor...")
-    actor_id = api_post('/acts', token, {
-        'name': ACTOR_NAME,
-        'isPublic': False,
-        'defaultRunOptions': {'timeoutSecs': 180, 'memoryMbytes': 256}
-    })['data']['id']
-    log(f"[+] Actor created: {actor_id}")
-    return build_actor(token, actor_id)
-
-
-def run_actor(token, actor_id):
-    """Run the actor and return {athlete_id: [run_dicts]}."""
-    run_input = {
-        'athleteIds': list(ATHLETES.keys()),
-        'baseUrl': PARKRUN_AJAX,
-        'headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        response = page.request.get(url, headers={
             'Accept': 'application/json, text/javascript, */*; q=0.01',
             'Accept-Language': 'en-GB,en;q=0.9',
             'Referer': 'https://www.parkrun.org.uk/',
             'X-Requested-With': 'XMLHttpRequest',
-        }
-    }
+        }, timeout=30000)
 
-    log(f"[*] Running actor {actor_id}...")
-    run_id = api_post(f'/acts/{actor_id}/runs', token, run_input)['data']['id']
-    log(f"[*] Run ID: {run_id}")
+        log(f"[*]   HTTP {response.status}")
+        body_text = response.text()
 
-    # Poll for completion
-    for i in range(36):  # 6 minutes max
-        time.sleep(10)
-        run = api_get(f'/actor-runs/{run_id}', token)['data']
-        status = run['status']
-        log(f"[*]   run status: {status} ({(i+1)*10}s)")
-        if status == 'SUCCEEDED':
+        if not response.ok:
+            log(f"[!]   Error body: {body_text[:300]}")
             break
-        if status in ['FAILED', 'ABORTED', 'TIMED-OUT']:
-            # Fetch actor run log for diagnostics
-            try:
-                log_r = requests.get(
-                    f'{APIFY_BASE}/actor-runs/{run_id}/log',
-                    headers=_auth_headers(token), timeout=30
-                )
-                if log_r.ok:
-                    log(f"[*] Actor run log:\n{log_r.text[:3000]}")
-                else:
-                    log(f"[*] Could not fetch run log: {log_r.status_code} {log_r.text[:200]}")
-            except Exception as log_err:
-                log(f"[*] Log fetch error: {log_err}")
-            raise Exception(f"Run failed: {status}")
-    else:
-        raise Exception("Run timed out")
 
-    # Fetch actor run log for diagnostics
-    try:
-        log_r = requests.get(
-            f'{APIFY_BASE}/actor-runs/{run_id}/log',
-            headers=_auth_headers(token), timeout=30
-        )
-        if log_r.ok:
-            log(f"[*] Actor run log:\n{log_r.text[:4000]}")
-        else:
-            log(f"[*] Could not fetch run log: {log_r.status_code}")
-    except Exception as log_err:
-        log(f"[*] Log fetch error: {log_err}")
+        # If we got HTML instead of JSON, the WAF challenge page wasn't solved
+        if body_text.lstrip().startswith('<'):
+            log(f"[!]   Got HTML (WAF challenge?) — title: "
+                f"{body_text[body_text.find('<title>')+7:body_text.find('</title>')][:80] if '<title>' in body_text else 'N/A'}")
+            break
 
-    # Get OUTPUT from key-value store
-    kv_id = run['defaultKeyValueStoreId']
-    log(f"[*] Fetching output from KV store {kv_id}...")
-    r = requests.get(
-        f'{APIFY_BASE}/key-value-stores/{kv_id}/records/OUTPUT',
-        headers=_auth_headers(token),
-        timeout=30
-    )
-    r.raise_for_status()
-    output = r.json()
-    # Log first item from each athlete for debugging
-    for aid, runs in (output or {}).items():
-        if runs:
-            log(f"[*] Sample run for {aid}: {json.dumps(runs[0], default=str)[:300]}")
-        else:
-            log(f"[*] Zero runs returned for athlete {aid}")
-    return output
+        try:
+            data = json.loads(body_text)
+        except json.JSONDecodeError as e:
+            log(f"[!]   JSON decode error: {e} — body: {body_text[:200]}")
+            break
+
+        runs = (data.get('data') or {}).get('Results') or []
+        log(f"[*]   Got {len(runs)} runs")
+        all_runs.extend(runs)
+
+        if len(runs) < 100:
+            break
+        offset += 100
+
+    return all_runs
 
 
 def parse_runs(raw_runs):
@@ -330,7 +129,7 @@ def group_by_alphabet(runs):
 
 def main():
     log("=" * 70)
-    log("PARKRUN DATA SCRAPER - Apify Actor API")
+    log("PARKRUN DATA SCRAPER - Python Playwright + Apify Proxy")
     log("=" * 70)
 
     apify_token = os.environ.get('APIFY_TOKEN')
@@ -340,52 +139,110 @@ def main():
         sys.exit(1)
     log(f"[*] APIFY_TOKEN present, length={len(apify_token)}")
 
+    # Apify residential proxy
+    proxy_server = 'http://proxy.apify.com:8000'
+    proxy_username = 'groups-RESIDENTIAL'
+    proxy_password = apify_token
+    log(f"[*] Proxy: {proxy_server} (RESIDENTIAL)")
+
     try:
-        actor_id = get_or_create_actor(apify_token)
-        raw_output = run_actor(apify_token, actor_id)
-    except Exception as e:
-        log(f"[-] Actor error: {e}")
-        log(traceback.format_exc())
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        log("[-] playwright not installed — run: pip install playwright && playwright install chromium")
         save_debug()
         sys.exit(1)
 
-    log(f"[*] Raw output keys: {list(raw_output.keys())}")
-
     all_data = {}
-    for athlete_id, athlete_info in ATHLETES.items():
-        raw_runs = raw_output.get(athlete_id, [])
-        log(f"\n[*] {athlete_info['name']}: {len(raw_runs)} raw runs")
 
-        if not raw_runs:
-            log(f"[!] No runs for {athlete_info['name']}")
-            continue
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(
+                headless=True,
+                proxy={
+                    'server': proxy_server,
+                    'username': proxy_username,
+                    'password': proxy_password,
+                }
+            )
+            context = browser.new_context(
+                user_agent=(
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                    'AppleWebKit/537.36 (KHTML, like Gecko) '
+                    'Chrome/120.0.0.0 Safari/537.36'
+                ),
+                viewport={'width': 1280, 'height': 800},
+                locale='en-GB',
+            )
 
-        if raw_runs and isinstance(raw_runs[0], dict):
-            log(f"[*] First run keys: {list(raw_runs[0].keys())}")
-            log(f"[*] First run: {json.dumps(raw_runs[0], indent=2, default=str)}")
+            # Warm up: visit homepage so WAF can issue its challenge cookie
+            log("[*] Warming up: visiting parkrun.org.uk homepage...")
+            warmup_page = context.new_page()
+            try:
+                warmup_page.goto(
+                    'https://www.parkrun.org.uk/',
+                    wait_until='domcontentloaded',
+                    timeout=30000
+                )
+                log(f"[*] Homepage title: {warmup_page.title()}")
+                warmup_page.wait_for_timeout(3000)  # allow JS challenge to run
+            except Exception as e:
+                log(f"[!] Homepage warmup error: {e}")
+            finally:
+                warmup_page.close()
 
-        runs = parse_runs(raw_runs)
-        if not runs:
-            log(f"[!] No valid runs parsed for {athlete_info['name']}")
-            continue
+            # Fetch data for each athlete
+            page = context.new_page()
+            for athlete_id, athlete_info in ATHLETES.items():
+                log(f"\n[*] Fetching {athlete_info['name']} (athlete {athlete_id})...")
+                try:
+                    raw_runs = fetch_athlete_runs(page, athlete_id)
+                except Exception as e:
+                    log(f"[-] Error fetching {athlete_info['name']}: {e}")
+                    log(traceback.format_exc())
+                    continue
 
-        alphabet_status, alphabet_map, letters_data = group_by_alphabet(runs)
+                log(f"[*] {athlete_info['name']}: {len(raw_runs)} raw runs")
+                if not raw_runs:
+                    log(f"[!] No runs returned for {athlete_info['name']}")
+                    continue
 
-        all_data[athlete_id] = {
-            'name': athlete_info['name'],
-            'athlete_id': athlete_id,
-            'location': athlete_info['location'],
-            'total_runs': len(runs),
-            'alphabet_status': alphabet_status,
-            'runs_per_letter': {l: len(r) for l, r in letters_data.items()},
-            'last_updated': datetime.now().isoformat()
-        }
+                if raw_runs and isinstance(raw_runs[0], dict):
+                    log(f"[*] First run keys: {list(raw_runs[0].keys())}")
+                    log(f"[*] First run: {json.dumps(raw_runs[0], default=str)[:300]}")
 
-        log(f"\n[+] {athlete_info['name']} Summary:")
-        for alph_key, alph_data in alphabet_status.items():
-            alph_num = alph_key.split('_')[1]
-            letters_str = ', '.join(alph_data['letters'][:5]) + ('...' if len(alph_data['letters']) > 5 else '')
-            log(f"    Alphabet {alph_num}: {alph_data['completed']}/26 ({letters_str})")
+                runs = parse_runs(raw_runs)
+                if not runs:
+                    log(f"[!] No valid runs parsed for {athlete_info['name']}")
+                    continue
+
+                alphabet_status, alphabet_map, letters_data = group_by_alphabet(runs)
+
+                all_data[athlete_id] = {
+                    'name': athlete_info['name'],
+                    'athlete_id': athlete_id,
+                    'location': athlete_info['location'],
+                    'total_runs': len(runs),
+                    'alphabet_status': alphabet_status,
+                    'runs_per_letter': {ltr: len(r) for ltr, r in letters_data.items()},
+                    'last_updated': datetime.now().isoformat()
+                }
+
+                log(f"\n[+] {athlete_info['name']} Summary:")
+                for alph_key, alph_data in alphabet_status.items():
+                    alph_num = alph_key.split('_')[1]
+                    letters_str = ', '.join(alph_data['letters'][:5])
+                    if len(alph_data['letters']) > 5:
+                        letters_str += '...'
+                    log(f"    Alphabet {alph_num}: {alph_data['completed']}/26 ({letters_str})")
+
+            page.close()
+            browser.close()
+
+    except Exception as e:
+        log(f"[-] Playwright error: {e}")
+        log(traceback.format_exc())
+        save_debug()
+        sys.exit(1)
 
     save_debug()
 
