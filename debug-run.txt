@@ -1,0 +1,19 @@
+Run: Tue Oct  6 14:05:58 UTC 2026
+APIFY_TOKEN_SET: yes
+total 96
+drwxr-xr-x 4 runner runner  4096 Oct  6 14:05 .
+drwxr-xr-x 3 runner runner  4096 Oct  6 14:05 ..
+drwxr-xr-x 7 runner runner  4096 Oct  6 14:05 .git
+drwxr-xr-x 3 runner runner  4096 Oct  6 14:05 .github
+-rw-r--r-- 1 runner runner  4762 Oct  6 14:05 README_1.md
+-rw-r--r-- 1 runner runner  9979 Oct  6 14:05 apify-scraper.py
+-rw-r--r-- 1 runner runner  4352 Oct  6 14:05 debug-raw-response.json
+-rw-r--r-- 1 runner runner    55 Oct  6 14:05 debug-run.txt
+-rw-r--r-- 1 runner runner  1715 Oct  6 14:05 debug-scraper.json
+-rw-r--r-- 1 runner runner  1602 Oct  6 14:05 debug_api.py
+-rw-r--r-- 1 runner runner  7011 Oct  6 14:05 fetch-parkrun-data.py
+-rw-r--r-- 1 runner runner  4277 Oct  6 14:05 gh-upload.py
+-rw-r--r-- 1 runner runner 11844 Oct  6 14:05 index.html
+-rw-r--r-- 1 runner runner   314 Oct  6 14:05 package.json
+-rw-r--r-- 1 runner runner    40 Oct  6 14:05 requirements_1.txt
+-rw-r--r-- 1 runner runner   752 Oct  6 14:05 update-data.yml
