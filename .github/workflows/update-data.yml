@@ -33,22 +33,29 @@ jobs:
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
         run: |
-          python apify-scraper.py 2>&1 | tee debug-stdout.txt || true
-          echo "--- ls after script ---" >> debug-stdout.txt
-          ls -la debug-scraper.json debug-stdout.txt 2>&1 >> debug-stdout.txt
+          echo "=== Run started: $(date -u) ===" > debug-run.txt
+          echo "Python: $(python --version 2>&1)" >> debug-run.txt
+          echo "Requests check: $(python -c 'import requests; print(requests.__version__)' 2>&1)" >> debug-run.txt
+          echo "APIFY_TOKEN set: $([ -n "$APIFY_TOKEN" ] && echo yes || echo NO)" >> debug-run.txt
+          echo "=== Script output ===" >> debug-run.txt
+          python apify-scraper.py >> debug-run.txt 2>&1 || echo "Script exited non-zero" >> debug-run.txt
+          echo "=== Files after script ===" >> debug-run.txt
+          ls -la debug-*.json debug-*.txt parkrun-data.json 2>&1 >> debug-run.txt
+          echo "=== Run ended: $(date -u) ===" >> debug-run.txt
+          cat debug-run.txt
 
       - name: Commit debug log (always)
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Parkrun Data Bot"
+          cp debug-run.txt /tmp/debug-run-new.txt 2>/dev/null || true
           cp debug-scraper.json /tmp/debug-new.json 2>/dev/null || true
-          cp debug-stdout.txt /tmp/stdout-new.txt 2>/dev/null || true
           git pull --rebase origin main || true
+          cp /tmp/debug-run-new.txt debug-run.txt 2>/dev/null || true
           cp /tmp/debug-new.json debug-scraper.json 2>/dev/null || true
-          cp /tmp/stdout-new.txt debug-stdout.txt 2>/dev/null || true
-          git add debug-scraper.json debug-stdout.txt || true
-          git diff --staged --quiet || git commit -m "debug: scraper log $(date -u +'%H:%M UTC')"
+          git add debug-run.txt debug-scraper.json || true
+          git diff --staged --quiet || git commit -m "debug: run log $(date -u +'%H:%M UTC')"
           git push origin HEAD:main || true
 
       - name: Check if data changed
