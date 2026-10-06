@@ -43,9 +43,9 @@ def make_session(apify_token):
     session = requests.Session()
     if apify_token:
         # Apify proxy: auto mode picks best proxy type for the target URL
-        proxy_url = f'http://auto:{apify_token}@proxy.apify.com:8000'
+        proxy_url = f'http://groups-DATACENTER:{apify_token}@proxy.apify.com:8000'
         session.proxies = {'http': proxy_url, 'https': proxy_url}
-        log("[*] Using Apify proxy to bypass WAF")
+        log("[*] Using Apify DATACENTER proxy to bypass WAF")
     else:
         log("[!] No APIFY_TOKEN — direct requests (may hit WAF)")
     session.headers.update(HEADERS)
