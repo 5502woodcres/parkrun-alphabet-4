@@ -34,9 +34,10 @@
           "Z"
         ],
         "completed": 25,
-        "remaining": [
-          "X"
-        ]
+        "total": 25,
+        "remaining": [],
+        "runs_needed": {},
+        "is_complete": true
       },
       "alphabet_2": {
         "letters": [
@@ -67,9 +68,10 @@
           "Z"
         ],
         "completed": 25,
-        "remaining": [
-          "X"
-        ]
+        "total": 25,
+        "remaining": [],
+        "runs_needed": {},
+        "is_complete": true
       },
       "alphabet_3": {
         "letters": [
@@ -100,9 +102,10 @@
           "Z"
         ],
         "completed": 25,
-        "remaining": [
-          "X"
-        ]
+        "total": 25,
+        "remaining": [],
+        "runs_needed": {},
+        "is_complete": true
       },
       "alphabet_4": {
         "letters": [
@@ -133,9 +136,103 @@
           "Z"
         ],
         "completed": 25,
+        "total": 25,
+        "remaining": [],
+        "runs_needed": {},
+        "is_complete": true
+      },
+      "alphabet_5": {
+        "letters": [
+          "A",
+          "B",
+          "C",
+          "E",
+          "F",
+          "G",
+          "H",
+          "L",
+          "M",
+          "N",
+          "O",
+          "P",
+          "S",
+          "T",
+          "V",
+          "W",
+          "Y"
+        ],
+        "completed": 17,
+        "total": 25,
         "remaining": [
-          "X"
-        ]
+          "D",
+          "I",
+          "J",
+          "K",
+          "Q",
+          "R",
+          "U",
+          "Z"
+        ],
+        "runs_needed": {
+          "D": 1,
+          "I": 1,
+          "J": 1,
+          "K": 1,
+          "Q": 1,
+          "R": 1,
+          "U": 1,
+          "Z": 1
+        },
+        "is_complete": false
+      },
+      "alphabet_6": {
+        "letters": [
+          "A",
+          "B",
+          "C",
+          "E",
+          "F",
+          "G",
+          "L",
+          "M",
+          "P",
+          "S",
+          "T",
+          "W"
+        ],
+        "completed": 12,
+        "total": 25,
+        "remaining": [
+          "D",
+          "H",
+          "I",
+          "J",
+          "K",
+          "N",
+          "O",
+          "Q",
+          "R",
+          "U",
+          "V",
+          "Y",
+          "Z"
+        ],
+        "runs_needed": {
+          "D": 2,
+          "H": 1,
+          "I": 2,
+          "J": 2,
+          "K": 2,
+          "N": 1,
+          "O": 1,
+          "Q": 2,
+          "R": 2,
+          "U": 2,
+          "V": 1,
+          "Y": 1,
+          "Z": 2
+        },
+        "is_complete": false
       }
     },
     "runs_per_letter": {
@@ -165,7 +262,7 @@
       "C": 17,
       "E": 6
     },
-    "last_updated": "2026-10-06T19:31:12.502666"
+    "last_updated": "2026-10-06T19:39:04.442315"
   },
   "2475659": {
     "name": "Beth",
@@ -202,9 +299,10 @@
           "Z"
         ],
         "completed": 25,
-        "remaining": [
-          "X"
-        ]
+        "total": 25,
+        "remaining": [],
+        "runs_needed": {},
+        "is_complete": true
       },
       "alphabet_2": {
         "letters": [
@@ -235,9 +333,10 @@
           "Z"
         ],
         "completed": 25,
-        "remaining": [
-          "X"
-        ]
+        "total": 25,
+        "remaining": [],
+        "runs_needed": {},
+        "is_complete": true
       },
       "alphabet_3": {
         "letters": [
@@ -268,9 +367,10 @@
           "Z"
         ],
         "completed": 25,
-        "remaining": [
-          "X"
-        ]
+        "total": 25,
+        "remaining": [],
+        "runs_needed": {},
+        "is_complete": true
       },
       "alphabet_4": {
         "letters": [
@@ -301,9 +401,102 @@
           "Z"
         ],
         "completed": 25,
+        "total": 25,
+        "remaining": [],
+        "runs_needed": {},
+        "is_complete": true
+      },
+      "alphabet_5": {
+        "letters": [
+          "A",
+          "B",
+          "C",
+          "D",
+          "E",
+          "F",
+          "G",
+          "H",
+          "K",
+          "L",
+          "M",
+          "N",
+          "O",
+          "S",
+          "T",
+          "V",
+          "W",
+          "Y"
+        ],
+        "completed": 18,
+        "total": 25,
         "remaining": [
-          "X"
-        ]
+          "I",
+          "J",
+          "P",
+          "Q",
+          "R",
+          "U",
+          "Z"
+        ],
+        "runs_needed": {
+          "I": 1,
+          "J": 1,
+          "P": 1,
+          "Q": 1,
+          "R": 1,
+          "U": 1,
+          "Z": 1
+        },
+        "is_complete": false
+      },
+      "alphabet_6": {
+        "letters": [
+          "B",
+          "C",
+          "E",
+          "F",
+          "G",
+          "H",
+          "K",
+          "L",
+          "M",
+          "S",
+          "T",
+          "W"
+        ],
+        "completed": 12,
+        "total": 25,
+        "remaining": [
+          "A",
+          "D",
+          "I",
+          "J",
+          "N",
+          "O",
+          "P",
+          "Q",
+          "R",
+          "U",
+          "V",
+          "Y",
+          "Z"
+        ],
+        "runs_needed": {
+          "A": 1,
+          "D": 1,
+          "I": 2,
+          "J": 2,
+          "N": 1,
+          "O": 1,
+          "P": 2,
+          "Q": 2,
+          "R": 2,
+          "U": 2,
+          "V": 1,
+          "Y": 1,
+          "Z": 2
+        },
+        "is_complete": false
       }
     },
     "runs_per_letter": {
@@ -333,6 +526,6 @@
       "E": 13,
       "M": 7
     },
-    "last_updated": "2026-10-06T19:31:29.063176"
+    "last_updated": "2026-10-06T19:39:34.102838"
   }
 }
