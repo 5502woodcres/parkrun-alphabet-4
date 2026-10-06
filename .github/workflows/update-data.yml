@@ -50,10 +50,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "=== Upload attempt ===" >> debug-run.txt
-          python gh-upload.py debug-run.txt debug-run.txt "debug: run log {ts}" >> debug-run.txt 2>&1 || echo "Upload script failed" >> debug-run.txt
-          cat debug-run.txt
-          # Try once more with the updated file (now includes upload output)
-          python gh-upload.py debug-run.txt debug-run.txt "debug: run log {ts}"
+          python gh-upload.py debug-run.txt debug-run.txt "debug: run log {ts}" 2>&1 | tee -a debug-run.txt | tee -a "$GITHUB_STEP_SUMMARY" || true
+          echo "---" >> "$GITHUB_STEP_SUMMARY"
+          # Upload once more so the full output (including above) is captured
+          python gh-upload.py debug-run.txt debug-run.txt "debug: run log {ts}" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || echo "Second upload also failed - see summary for details"
 
       - name: Check if data file was generated
         id: changes
