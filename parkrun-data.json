@@ -151,7 +151,6 @@
           "H",
           "L",
           "M",
-          "O",
           "P",
           "S",
           "T",
@@ -159,7 +158,7 @@
           "W",
           "Y"
         ],
-        "completed": 15,
+        "completed": 14,
         "total": 25,
         "remaining": [
           "D",
@@ -168,6 +167,7 @@
           "J",
           "K",
           "N",
+          "O",
           "Q",
           "R",
           "U",
@@ -180,6 +180,7 @@
           "J": 1,
           "K": 1,
           "N": 1,
+          "O": 1,
           "Q": 1,
           "R": 1,
           "U": 1,
@@ -189,7 +190,6 @@
       },
       "alphabet_6": {
         "letters": [
-          "A",
           "B",
           "C",
           "G",
@@ -199,9 +199,10 @@
           "T",
           "W"
         ],
-        "completed": 9,
+        "completed": 8,
         "total": 25,
         "remaining": [
+          "A",
           "D",
           "E",
           "F",
@@ -220,6 +221,7 @@
           "Z"
         ],
         "runs_needed": {
+          "A": 1,
           "D": 2,
           "E": 2,
           "F": 1,
@@ -229,7 +231,7 @@
           "K": 2,
           "L": 1,
           "N": 2,
-          "O": 1,
+          "O": 2,
           "Q": 2,
           "R": 2,
           "U": 2,
@@ -241,9 +243,9 @@
       }
     },
     "runs_per_letter": {
-      "T": 9,
-      "A": 6,
-      "O": 5,
+      "T": 8,
+      "A": 5,
+      "O": 4,
       "Y": 5,
       "F": 5,
       "V": 5,
@@ -275,7 +277,6 @@
         "Thornbury",
         "Thoulstone",
         "Three Brooks",
-        "Time",
         "Trelai Park",
         "Tremorfa"
       ],
@@ -283,7 +284,6 @@
         "Aberbeeg",
         "Aberdare",
         "Abingdon",
-        "Age Grading",
         "Andover",
         "Arrow Valley"
       ],
@@ -291,7 +291,6 @@
         "Oaklands",
         "Old Deer Park",
         "Ormeau",
-        "Overall Position",
         "Oxford"
       ],
       "Y": [
@@ -465,7 +464,7 @@
         "Evesham"
       ]
     },
-    "last_updated": "2026-10-06T20:15:43.489949"
+    "last_updated": "2026-10-06T21:19:27.658763"
   },
   "2475659": {
     "name": "Beth",
@@ -611,7 +610,6 @@
       },
       "alphabet_5": {
         "letters": [
-          "A",
           "B",
           "C",
           "D",
@@ -619,22 +617,23 @@
           "H",
           "L",
           "M",
-          "O",
           "S",
           "T",
           "V",
           "W",
           "Y"
         ],
-        "completed": 14,
+        "completed": 12,
         "total": 25,
         "remaining": [
+          "A",
           "E",
           "F",
           "I",
           "J",
           "K",
           "N",
+          "O",
           "P",
           "Q",
           "R",
@@ -642,12 +641,14 @@
           "Z"
         ],
         "runs_needed": {
+          "A": 1,
           "E": 1,
           "F": 1,
           "I": 1,
           "J": 1,
           "K": 1,
           "N": 1,
+          "O": 1,
           "P": 1,
           "Q": 1,
           "R": 1,
@@ -689,7 +690,7 @@
           "Z"
         ],
         "runs_needed": {
-          "A": 1,
+          "A": 2,
           "D": 1,
           "E": 2,
           "F": 2,
@@ -698,7 +699,7 @@
           "K": 2,
           "L": 1,
           "N": 2,
-          "O": 1,
+          "O": 2,
           "P": 2,
           "Q": 2,
           "R": 2,
@@ -711,9 +712,9 @@
       }
     },
     "runs_per_letter": {
-      "T": 8,
-      "A": 5,
-      "O": 5,
+      "T": 7,
+      "A": 4,
+      "O": 4,
       "Y": 5,
       "D": 5,
       "S": 11,
@@ -745,13 +746,11 @@
         "Thornbury",
         "Thoulstone",
         "Three Brooks",
-        "Time",
         "Tremorfa"
       ],
       "A": [
         "Aberbeeg",
         "Abingdon",
-        "Age Grading",
         "Arrow Valley",
         "Ashton Court"
       ],
@@ -759,7 +758,6 @@
         "Oaklands",
         "Old Deer Park",
         "Ormeau",
-        "Overall Position",
         "Oxford"
       ],
       "Y": [
@@ -936,6 +934,6 @@
         "Mole Valley"
       ]
     },
-    "last_updated": "2026-10-06T20:16:14.906243"
+    "last_updated": "2026-10-06T21:19:27.659489"
   }
 }

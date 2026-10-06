@@ -356,6 +356,15 @@ def parse_runs(raw_runs):
 # The 25 letters that count toward the alphabet challenge (A-Z, X excluded)
 CHALLENGE_LETTERS = [chr(i) for i in range(65, 91) if chr(i) != 'X']
 
+# HTML table column headers and other strings that are NOT real parkrun venue names.
+# These appear when the regex parser catches header rows rendered as <td> cells.
+INVALID_COURSE_NAMES = {
+    'age grading', 'age grade', 'overall position', 'gender position',
+    'position', 'run date', 'event date', 'run no', 'run number',
+    'time', 'personal best', 'pb', 'volunteer', 'race number',
+    'club', 'athlete', 'results', 'event',
+}
+
 
 def normalize_course(name):
     """Normalise a parkrun course name for deduplication.
@@ -363,10 +372,15 @@ def normalize_course(name):
     Strips whitespace, lowercases, and removes a trailing ' parkrun'
     suffix so that 'Cheltenham' and 'Cheltenham parkrun' collapse to
     the same key.
+
+    Returns an empty string (falsy) for strings that are HTML table
+    column headers rather than real parkrun venue names.
     """
     n = name.strip().lower()
     if n.endswith(' parkrun'):
         n = n[:-8].strip()
+    if n in INVALID_COURSE_NAMES:
+        return ''
     return n
 
 
