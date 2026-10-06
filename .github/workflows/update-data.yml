@@ -26,6 +26,14 @@ jobs:
       - name: Debug parkrun API response
         run: python debug_api.py
 
+      - name: Commit debug response
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "Parkrun Data Bot"
+          git add debug-raw-response.json
+          git diff --staged --quiet || git commit -m "debug: save raw API response"
+          git push
+
       - name: Fetch parkrun data
         run: python apify-scraper.py
 
