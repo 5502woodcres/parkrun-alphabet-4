@@ -97,25 +97,8 @@ def api_post(path, token, data=None, extra_params=None):
     return r.json()
 
 
-def get_or_create_actor(token):
-    """Return actor ID, creating and building it if needed."""
-    # Check for existing actor
-    actors = api_get('/acts?my=true&limit=100', token).get('data', {}).get('items', [])
-    for actor in actors:
-        if actor['name'] == ACTOR_NAME:
-            log(f"[+] Found existing actor: {actor['id']}")
-            return actor['id']
-
-    # Create actor
-    log("[*] Creating Apify actor...")
-    actor_id = api_post('/acts', token, {
-        'name': ACTOR_NAME,
-        'isPublic': False,
-        'defaultRunOptions': {'timeoutSecs': 180, 'memoryMbytes': 256}
-    })['data']['id']
-    log(f"[+] Actor created: {actor_id}")
-
-    # Upload source code
+def build_actor(token, actor_id):
+    """Upload source code and build the actor. Returns actor_id."""
     api_post(f'/acts/{actor_id}/versions', token, {
         'versionNumber': '0.0',
         'sourceType': 'SOURCE_FILES',
@@ -127,7 +110,6 @@ def get_or_create_actor(token):
     })
     log("[+] Source uploaded")
 
-    # Build actor
     build_id = api_post(f'/acts/{actor_id}/builds', token, extra_params={
         'version': '0.0', 'tag': 'latest'
     })['data']['id']
@@ -145,6 +127,41 @@ def get_or_create_actor(token):
             raise Exception(f"Build failed: {status}\n{build.get('log', '')}")
 
     raise Exception("Build timed out")
+
+
+def get_or_create_actor(token):
+    """Return actor ID with a valid latest build, creating/rebuilding if needed."""
+    # Check for existing actor
+    actors = api_get('/acts?my=true&limit=100', token).get('data', {}).get('items', [])
+    actor_id = None
+    for actor in actors:
+        if actor['name'] == ACTOR_NAME:
+            actor_id = actor['id']
+            log(f"[+] Found existing actor: {actor_id}")
+            break
+
+    if actor_id:
+        # Verify it has a successful 'latest' build
+        try:
+            builds = api_get(f'/acts/{actor_id}/builds?tag=latest&limit=1', token)
+            items = builds.get('data', {}).get('items', [])
+            if items and items[0].get('status') == 'SUCCEEDED':
+                log(f"[+] Actor has valid latest build — skipping rebuild")
+                return actor_id
+            log(f"[!] No valid latest build found — rebuilding actor")
+        except Exception as e:
+            log(f"[!] Could not check builds: {e} — rebuilding actor")
+        return build_actor(token, actor_id)
+
+    # Create actor from scratch
+    log("[*] Creating Apify actor...")
+    actor_id = api_post('/acts', token, {
+        'name': ACTOR_NAME,
+        'isPublic': False,
+        'defaultRunOptions': {'timeoutSecs': 180, 'memoryMbytes': 256}
+    })['data']['id']
+    log(f"[+] Actor created: {actor_id}")
+    return build_actor(token, actor_id)
 
 
 def run_actor(token, actor_id):
