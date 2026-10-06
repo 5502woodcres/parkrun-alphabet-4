@@ -27,8 +27,33 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install playwright playwright-stealth
+          pip install playwright
+          pip install playwright-stealth==0.0.4 || echo "WARNING: playwright-stealth install failed"
           playwright install chromium --with-deps
+
+      - name: Test Apify proxy auth
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: |
+          echo "=== Apify proxy auth test ==="
+          if [ -z "$APIFY_TOKEN" ]; then
+            echo "APIFY_TOKEN secret is empty or not set"
+          else
+            echo "Token length: ${#APIFY_TOKEN}"
+            echo "Token prefix: ${APIFY_TOKEN:0:10}"
+            HTTP_CODE=$(curl -s -o /tmp/proxy-test.txt -w "%{http_code}" \
+              -x "http://proxy.apify.com:8000" \
+              -U "auto:${APIFY_TOKEN}" \
+              --max-time 20 \
+              "https://api.ipify.org" 2>&1) || HTTP_CODE="CURL_ERROR"
+            echo "HTTP status: $HTTP_CODE"
+            echo "Response body: $(cat /tmp/proxy-test.txt 2>/dev/null | head -5)"
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "PROXY AUTH: SUCCESS - egress IP: $(cat /tmp/proxy-test.txt)"
+            else
+              echo "PROXY AUTH: FAILED"
+            fi
+          fi
 
       - name: Fetch parkrun data
         env:
