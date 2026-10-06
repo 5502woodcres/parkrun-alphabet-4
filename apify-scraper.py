@@ -302,7 +302,6 @@ def run_scraper(pw, proxy_config=None):
                     log(f"[*] HTML fallback returned {len(runs)} runs")
 
             if not runs:
-            if not runs:
                 log(f"[!] No runs obtained for {athlete_info['name']} (AJAX + HTML both failed)")
                 continue
 
