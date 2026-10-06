@@ -224,6 +224,19 @@ def run_actor(token, actor_id):
     else:
         raise Exception("Run timed out")
 
+    # Fetch actor run log for diagnostics
+    try:
+        log_r = requests.get(
+            f'{APIFY_BASE}/actor-runs/{run_id}/log',
+            headers=_auth_headers(token), timeout=30
+        )
+        if log_r.ok:
+            log(f"[*] Actor run log:\n{log_r.text[:4000]}")
+        else:
+            log(f"[*] Could not fetch run log: {log_r.status_code}")
+    except Exception as log_err:
+        log(f"[*] Log fetch error: {log_err}")
+
     # Get OUTPUT from key-value store
     kv_id = run['defaultKeyValueStoreId']
     log(f"[*] Fetching output from KV store {kv_id}...")
@@ -233,7 +246,14 @@ def run_actor(token, actor_id):
         timeout=30
     )
     r.raise_for_status()
-    return r.json()
+    output = r.json()
+    # Log first item from each athlete for debugging
+    for aid, runs in (output or {}).items():
+        if runs:
+            log(f"[*] Sample run for {aid}: {json.dumps(runs[0], default=str)[:300]}")
+        else:
+            log(f"[*] Zero runs returned for athlete {aid}")
+    return output
 
 
 def parse_runs(raw_runs):
