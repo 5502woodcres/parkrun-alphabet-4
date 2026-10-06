@@ -20,10 +20,20 @@ ACTOR_NAME = 'parkrun-data-fetcher'
 # Runs on Apify's servers (trusted IPs that bypass parkrun WAF)
 ACTOR_JS = """\
 import { Actor } from 'apify';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
 
 await Actor.init();
 const { athleteIds, baseUrl, headers } = await Actor.getInput();
 const results = {};
+
+// Use Apify residential proxy to bypass parkrun WAF
+let proxyConfiguration = null;
+try {
+    proxyConfiguration = await Actor.createProxyConfiguration({ groups: ['RESIDENTIAL'] });
+    console.log('Residential proxy configuration created');
+} catch (err) {
+    console.log(`Proxy config failed: ${err.message} — falling back to direct`);
+}
 
 for (const athleteId of athleteIds) {
     console.log(`Fetching athlete ${athleteId}...`);
@@ -31,9 +41,21 @@ for (const athleteId of athleteIds) {
     let offset = 0;
     while (true) {
         const url = `${baseUrl}?athleteNumber=${athleteId}&offset=${offset}&nbRecords=100`;
-        const resp = await fetch(url, { headers });
+        let resp;
+        try {
+            if (proxyConfiguration) {
+                const proxyUrl = await proxyConfiguration.newUrl();
+                const dispatcher = new ProxyAgent({ uri: proxyUrl });
+                resp = await undiciFetch(url, { headers, dispatcher });
+            } else {
+                resp = await fetch(url, { headers });
+            }
+        } catch (fetchErr) {
+            console.log(`  fetch error: ${fetchErr.message}`);
+            break;
+        }
         console.log(`  offset=${offset}: HTTP ${resp.status}`);
-        if (!resp.ok) { console.log('  body:', (await resp.text()).slice(0, 200)); break; }
+        if (!resp.ok) { console.log('  body:', (await resp.text()).slice(0, 500)); break; }
         const data = await resp.json();
         const runs = data?.data?.Results ?? [];
         console.log(`  got ${runs.length} runs`);
@@ -54,7 +76,7 @@ PACKAGE_JSON = json.dumps({
     "version": "0.0.1",
     "type": "module",
     "scripts": {"start": "node src/main.js"},
-    "dependencies": {"apify": "^3.0.0"}
+    "dependencies": {"apify": "^3.0.0", "undici": "^6.0.0"}
 })
 
 LOG = []
