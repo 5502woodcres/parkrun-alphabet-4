@@ -333,6 +333,87 @@ def run_scraper(pw, proxy_config=None):
         browser.close()
 
 
+def run_scraper_patchright(proxy_config=None):
+    """Same scrape logic but using patchright (stealthier Chromium fork)."""
+    try:
+        from patchright.sync_api import sync_playwright as sync_patchright
+    except ImportError:
+        log("[!] patchright not installed — skipping")
+        return {}
+
+    label = f"patchright+proxy={proxy_config['server']}" if proxy_config else "patchright direct"
+    log(f"\n[*] Attempting scrape: {label}")
+
+    launch_kwargs = {
+        'headless': True,
+        'args': ['--no-sandbox', '--disable-setuid-sandbox'],
+    }
+    if proxy_config:
+        launch_kwargs['proxy'] = proxy_config
+
+    with sync_patchright() as pw:
+        browser = pw.chromium.launch(**launch_kwargs)
+        context = browser.new_context(
+            user_agent=(
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/120.0.0.0 Safari/537.36'
+            ),
+            viewport={'width': 1280, 'height': 800},
+            locale='en-GB',
+        )
+        try:
+            warmup_context(context)
+            all_data = {}
+            page = context.new_page()
+
+            for athlete_id, athlete_info in ATHLETES.items():
+                log(f"\n[*] Fetching {athlete_info['name']} (athlete {athlete_id})...")
+                runs = None
+                try:
+                    raw_runs = fetch_athlete_runs(page, athlete_id)
+                    log(f"[*] {athlete_info['name']}: {len(raw_runs)} raw runs via AJAX")
+                    if raw_runs:
+                        runs = parse_runs(raw_runs)
+                except Exception as e:
+                    log(f"[-] AJAX error for {athlete_info['name']}: {e}")
+
+                if not runs:
+                    log(f"[*] Trying HTML fallback for {athlete_info['name']}...")
+                    html_runs = fetch_athlete_via_html(context, athlete_id)
+                    if html_runs:
+                        runs = html_runs
+                        log(f"[*] HTML fallback returned {len(runs)} runs")
+
+                if not runs:
+                    log(f"[!] No runs obtained for {athlete_info['name']}")
+                    continue
+
+                alphabet_status, alphabet_map, letters_data = group_by_alphabet(runs)
+                all_data[athlete_id] = {
+                    'name': athlete_info['name'],
+                    'athlete_id': athlete_id,
+                    'location': athlete_info['location'],
+                    'total_runs': len(runs),
+                    'alphabet_status': alphabet_status,
+                    'runs_per_letter': {ltr: len(r) for ltr, r in letters_data.items()},
+                    'last_updated': datetime.now().isoformat()
+                }
+
+                log(f"\n[+] {athlete_info['name']} Summary:")
+                for alph_key, alph_data in alphabet_status.items():
+                    alph_num = alph_key.split('_')[1]
+                    letters_str = ', '.join(alph_data['letters'][:5])
+                    if len(alph_data['letters']) > 5:
+                        letters_str += '...'
+                    log(f"    Alphabet {alph_num}: {alph_data['completed']}/26 ({letters_str})")
+
+            page.close()
+            return all_data
+        finally:
+            browser.close()
+
+
 def main():
     log("=" * 70)
     log("PARKRUN DATA SCRAPER - Python Playwright")
@@ -400,6 +481,19 @@ def main():
             except Exception as e:
                 log(f"[-] Direct scrape error: {e}")
                 log(traceback.format_exc())
+
+    # Attempt 3: patchright direct (stealthier Chromium fork, better WAF bypass)
+    if not all_data:
+        log("\n[*] Trying patchright (stealth Chromium fork)...")
+        try:
+            all_data = run_scraper_patchright(proxy_config=None)
+            if all_data:
+                log("[+] Patchright direct scrape succeeded")
+            else:
+                log("[!] Patchright direct scrape returned no data")
+        except Exception as e:
+            log(f"[-] Patchright error: {e}")
+            log(traceback.format_exc())
 
     save_debug()
 
