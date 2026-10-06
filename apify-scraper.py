@@ -2,6 +2,7 @@
 import requests
 import json
 import sys
+import time
 from datetime import datetime
 
 APIFY_TOKEN = None
@@ -15,7 +16,8 @@ ATHLETES = {
 def fetch_from_apify(athlete_id):
     print(f"\n[*] Fetching {ATHLETES[athlete_id]['name']} ({athlete_id})...")
     
-    url = f'https://api.apify.com/v2/acts/{APIFY_ACTOR_ID}/run-sync'
+    # Use async endpoint, then wait for result
+    url = f'https://api.apify.com/v2/acts/{APIFY_ACTOR_ID}/runs'
     headers = {
         'Authorization': f'Bearer {APIFY_TOKEN}',
         'Content-Type': 'application/json'
@@ -28,31 +30,39 @@ def fetch_from_apify(athlete_id):
     }
     
     try:
-        print(f"[*] Calling: {url}")
-        print(f"[*] Payload: {payload}")
-        response = requests.post(url, json=payload, headers=headers, timeout=120)
-        
-        print(f"[*] Status: {response.status_code}")
-        print(f"[*] Response text: {response.text[:500]}")
-        
+        print(f"[*] Starting async run...")
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
         response.raise_for_status()
         
-        if response.text:
-            return response.json()
-        else:
-            print(f"[-] Empty response from API")
+        run_data = response.json()
+        run_id = run_data.get('data', {}).get('id')
+        
+        if not run_id:
+            print(f"[-] No run ID in response")
+            print(f"[-] Response: {run_data}")
             return None
+        
+        print(f"[*] Run ID: {run_id}")
+        print(f"[*] Waiting for results...")
+        
+        # Poll for completion (max 60 seconds)
+        for attempt in range(60):
+            time.sleep(1)
             
-    except requests.exceptions.HTTPError as e:
-        print(f"[-] HTTP Error: {e}")
-        print(f"[-] Response: {response.text}")
+            result_url = f'https://api.apify.com/v2/runs/{run_id}/dataset/items'
+            result_response = requests.get(result_url, headers=headers, timeout=10)
+            
+            if result_response.status_code == 200:
+                items = result_response.json()
+                if items:
+                    print(f"[+] Got {len(items)} results")
+                    return {'items': items}
+        
+        print(f"[-] Timeout waiting for results")
         return None
-    except json.JSONDecodeError as e:
-        print(f"[-] JSON Parse Error: {e}")
-        print(f"[-] Raw response: {response.text}")
-        return None
+        
     except requests.RequestException as e:
-        print(f"[-] Request Error: {e}")
+        print(f"[-] Error: {e}")
         return None
 
 def parse_athlete_data(apify_response, athlete_id, athlete_info):
@@ -60,16 +70,15 @@ def parse_athlete_data(apify_response, athlete_id, athlete_info):
         return None
     
     try:
-        results = apify_response.get('output', {}).get('athleteData', [])
-        if not results:
-            print(f"[-] No results for {athlete_id}")
+        items = apify_response.get('items', [])
+        if not items:
+            print(f"[-] No items in response")
             return None
         
         runs = []
-        for result in results:
-            date_str = result.get('date')
-            course = result.get('courseName') or result.get('course', '')
-            time_str = result.get('time', '')
+        for item in items:
+            date_str = item.get('date')
+            course = item.get('courseName') or item.get('courseName', '')
             
             if not date_str or not course:
                 continue
@@ -78,14 +87,15 @@ def parse_athlete_data(apify_response, athlete_id, athlete_info):
             runs.append({
                 'date': date_str,
                 'course': course,
-                'time': time_str,
+                'time': item.get('time', ''),
                 'letter': letter
             })
         
         print(f"[+] Parsed {len(runs)} runs")
         return runs
     except Exception as e:
-        print(f"[-] Error parsing: {e}")
+        print(f"[-] Parse error: {e}")
+        print(f"[-] Response: {apify_response}")
         return None
 
 def group_by_alphabet(runs):
@@ -170,7 +180,7 @@ def main():
         print(f"\n[+] Saved to parkrun-data.json")
         sys.exit(0)
     else:
-        print(f"\n[!] No data collected")
+        print(f"\n[!] No data")
         sys.exit(1)
 
 if __name__ == '__main__':
