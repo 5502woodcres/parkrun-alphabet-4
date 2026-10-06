@@ -140,6 +140,11 @@ def scrape_via_scraperapi(api_key):
             continue
 
         alphabet_status, alphabet_map, letters_data = group_by_alphabet(runs)
+        # Build course list per letter for transparency / debugging
+        courses_per_letter = {
+            ltr: sorted(r['course'] for r in runs_list)
+            for ltr, runs_list in letters_data.items()
+        }
         all_data[athlete_id] = {
             'name': athlete_info['name'],
             'athlete_id': athlete_id,
@@ -147,6 +152,7 @@ def scrape_via_scraperapi(api_key):
             'total_runs': len(runs),
             'alphabet_status': alphabet_status,
             'runs_per_letter': {ltr: len(r) for ltr, r in letters_data.items()},
+            'courses_per_letter': courses_per_letter,
             'last_updated': datetime.now().isoformat()
         }
 
