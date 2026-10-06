@@ -3,6 +3,7 @@
     "======================================================================",
     "PARKRUN DATA SCRAPER - Apify Proxy + Direct AJAX",
     "======================================================================",
+    "[*] APIFY_TOKEN present: True, length: 46",
     "[*] Using Apify proxy to bypass WAF",
     "\n[*] Fetching Lisa (3934942)...",
     "[-] Request error at offset=0: HTTPSConnectionPool(host='www.parkrun.org.uk', port=443): Max retries exceeded with url: /results/athleteresultshistory/?athleteNumber=3934942&offset=0&nbRecords=100 (Caused by ProxyError('Unable to connect to proxy', OSError('Tunnel connection failed: 407 Proxy Authentication Required')))",
