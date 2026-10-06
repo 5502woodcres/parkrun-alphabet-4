@@ -216,6 +216,18 @@ def run_actor(token, actor_id):
         if status == 'SUCCEEDED':
             break
         if status in ['FAILED', 'ABORTED', 'TIMED-OUT']:
+            # Fetch actor run log for diagnostics
+            try:
+                log_r = requests.get(
+                    f'{APIFY_BASE}/actor-runs/{run_id}/log',
+                    headers=_auth_headers(token), timeout=30
+                )
+                if log_r.ok:
+                    log(f"[*] Actor run log:\n{log_r.text[:3000]}")
+                else:
+                    log(f"[*] Could not fetch run log: {log_r.status_code} {log_r.text[:200]}")
+            except Exception as log_err:
+                log(f"[*] Log fetch error: {log_err}")
             raise Exception(f"Run failed: {status}")
     else:
         raise Exception("Run timed out")
