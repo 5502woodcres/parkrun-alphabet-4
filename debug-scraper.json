@@ -4,6 +4,7 @@
     "PARKRUN DATA SCRAPER - Python Playwright",
     "======================================================================",
     "[*] APIFY_TOKEN present (len=46, prefix=apify_api_)",
+    "[+] Apify token VALID \u2014 user: formal_family_whf, plan: FREE",
     "\n[*] Attempting scrape: proxy=http://proxy.apify.com:8000",
     "[*] Warming up: visiting parkrun.org.uk homepage...",
     "[*] Manual stealth patches applied (playwright-stealth not installed)",
