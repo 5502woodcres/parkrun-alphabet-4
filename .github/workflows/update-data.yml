@@ -35,83 +35,33 @@ jobs:
         run: |
           rm -f parkrun-data.json
           python apify-scraper.py || true
-          echo "parkrun-data.json: $(ls parkrun-data.json 2>/dev/null && echo YES || echo NO)"
-          echo "debug-scraper.json: $(ls debug-scraper.json 2>/dev/null && echo YES || echo NO)"
+          echo "parkrun-data.json exists: $(test -f parkrun-data.json && echo YES || echo NO)"
+          echo "debug-scraper.json exists: $(test -f debug-scraper.json && echo YES || echo NO)"
+          if [ -f debug-scraper.json ]; then
+            echo "=== debug-scraper.json ==="
+            cat debug-scraper.json
+            echo "=========================="
+          fi
 
-      - name: Upload debug-scraper.json
+      - name: Commit and push debug log
         if: always()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 - << 'PYEOF'
-          import base64, json, os, sys
-          try:
-              import requests as req
-          except ImportError:
-              import urllib.request as req
-              req = None
-          import urllib.request, urllib.error
-
-          fname = 'debug-scraper.json'
-          repo = os.environ.get('GITHUB_REPOSITORY', '')
-          token = os.environ.get('GITHUB_TOKEN', '')
-          print(f'repo={repo!r} token_len={len(token)} file={fname}')
-
-          if not token:
-              print('ERROR: GITHUB_TOKEN not set'); sys.exit(1)
-          if not os.path.exists(fname):
-              print(f'ERROR: {fname} not found'); sys.exit(0)
-
-          with open(fname, 'rb') as f:
-              content = base64.b64encode(f.read()).decode()
-          print(f'content_len={len(content)}')
-
-          url = f'https://api.github.com/repos/{repo}/contents/{fname}'
-          hdrs = {'Authorization': f'token {token}',
-                  'Accept': 'application/vnd.github+json',
-                  'Content-Type': 'application/json'}
-
-          # GET existing SHA
-          try:
-              r = urllib.request.Request(url, headers=hdrs)
-              with urllib.request.urlopen(r) as resp:
-                  sha = json.loads(resp.read()).get('sha', '')
-              print(f'existing_sha={sha[:10]}')
-          except urllib.error.HTTPError as e:
-              if e.code == 404:
-                  sha = ''; print('file not in repo yet - creating')
-              else:
-                  print(f'GET err {e.code}: {e.read().decode()[:200]}'); sha = ''
-          except Exception as e:
-              print(f'GET exception: {e}'); sha = ''
-
-          payload = {'message': 'debug: scraper log', 'content': content}
-          if sha:
-              payload['sha'] = sha
-
-          data = json.dumps(payload).encode()
-          r = urllib.request.Request(url, data=data, headers=hdrs, method='PUT')
-          try:
-              with urllib.request.urlopen(r) as resp:
-                  result = json.loads(resp.read())
-                  print('SUCCESS commit:', result.get('commit', {}).get('sha', '')[:8])
-          except urllib.error.HTTPError as e:
-              body = e.read().decode()[:400]
-              print(f'PUT HTTP {e.code}: {body}')
-              sys.exit(1)
-          except Exception as e:
-              print(f'PUT exception: {e}')
-              sys.exit(1)
-          PYEOF
-
-      - name: Check for data and upload
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          if [ -f debug-scraper.json ]; then
+            git add debug-scraper.json
+            git diff --cached --quiet || git commit -m "debug: scraper log [skip ci]"
+          fi
           if [ -f parkrun-data.json ]; then
-            echo "Data generated - uploading"
-            python gh-upload.py parkrun-data.json parkrun-data.json "chore: auto-update parkrun data - {ts}"
-          else
+            git add parkrun-data.json
+            git diff --cached --quiet || git commit -m "chore: auto-update parkrun data [skip ci]"
+          fi
+          git push || echo "Push failed (no changes or permission error)"
+
+      - name: Fail if no data
+        run: |
+          if [ ! -f parkrun-data.json ]; then
             echo "No data generated - check debug-scraper.json in repo"
             exit 1
           fi
+          echo "Success - parkrun-data.json generated"
