@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Parkrun scraper: Python Playwright headless browser to bypass AWS WAF JS challenge."""
+"""Parkrun scraper: Playwright headless browser to bypass AWS WAF JS challenge.
+
+Strategy:
+  1. If APIFY_TOKEN set → use Apify residential proxy (bypasses IP block)
+  2. If proxy fails or no token → try direct with playwright-stealth (avoids headless detection)
+"""
 import sys
 import json
 import os
@@ -29,6 +34,59 @@ def save_debug(extra=None):
         json.dump(debug, f, indent=2, default=str)
 
 
+def apply_stealth(page):
+    """Apply basic stealth patches to avoid headless browser detection."""
+    try:
+        from playwright_stealth import stealth_sync
+        stealth_sync(page)
+        log("[*] playwright-stealth applied")
+    except ImportError:
+        # Manual stealth: remove webdriver flag, spoof plugins etc.
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-GB', 'en'] });
+            window.chrome = { runtime: {} };
+        """)
+        log("[*] Manual stealth patches applied (playwright-stealth not installed)")
+
+
+def warmup_context(context):
+    """Visit parkrun homepage so WAF JS challenge can execute and set the token cookie."""
+    log("[*] Warming up: visiting parkrun.org.uk homepage...")
+    warmup_page = context.new_page()
+    apply_stealth(warmup_page)
+    try:
+        warmup_page.goto(
+            'https://www.parkrun.org.uk/',
+            wait_until='domcontentloaded',
+            timeout=60000
+        )
+        log(f"[*] Homepage title (initial): {warmup_page.title()}")
+
+        # Wait for WAF JS challenge to execute and redirect
+        try:
+            warmup_page.wait_for_function(
+                "document.title !== 'Human Verification'",
+                timeout=20000
+            )
+            log(f"[*] Homepage title (after WAF): {warmup_page.title()}")
+        except Exception:
+            log(f"[!] WAF challenge did not resolve — title still: {warmup_page.title()}")
+
+        warmup_page.wait_for_timeout(3000)
+        cookies = context.cookies()
+        log(f"[*] Cookies after warmup: {len(cookies)}")
+        for c in cookies:
+            name = c['name']
+            val_preview = c['value'][:20] + '...' if len(c['value']) > 20 else c['value']
+            log(f"[*]   Cookie: {name}={val_preview} domain={c['domain']}")
+    except Exception as e:
+        log(f"[!] Homepage warmup error: {e}")
+    finally:
+        warmup_page.close()
+
+
 def fetch_athlete_runs(page, athlete_id):
     """Fetch all runs for an athlete using an existing Playwright page."""
     all_runs = []
@@ -53,7 +111,6 @@ def fetch_athlete_runs(page, athlete_id):
             log(f"[!]   Error body: {body_text[:300]}")
             break
 
-        # If we got HTML instead of JSON, the WAF challenge page wasn't solved
         if body_text.lstrip().startswith('<'):
             title = 'N/A'
             if '<title>' in body_text:
@@ -128,15 +185,83 @@ def group_by_alphabet(runs):
     return result, alphabet_map, letters
 
 
-def launch_browser(pw, proxy_config=None):
-    """Launch Chromium with optional proxy."""
-    launch_args = {
+def run_scraper(pw, proxy_config=None):
+    """Run the full scrape, return dict of data or {} on failure."""
+    label = f"proxy={proxy_config['server']}" if proxy_config else "direct (no proxy)"
+    log(f"\n[*] Attempting scrape: {label}")
+
+    launch_kwargs = {
         'headless': True,
         'args': ['--no-sandbox', '--disable-setuid-sandbox'],
     }
     if proxy_config:
-        launch_args['proxy'] = proxy_config
-    return pw.chromium.launch(**launch_args)
+        launch_kwargs['proxy'] = proxy_config
+
+    browser = pw.chromium.launch(**launch_kwargs)
+    context = browser.new_context(
+        user_agent=(
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/120.0.0.0 Safari/537.36'
+        ),
+        viewport={'width': 1280, 'height': 800},
+        locale='en-GB',
+    )
+
+    try:
+        warmup_context(context)
+
+        all_data = {}
+        page = context.new_page()
+        apply_stealth(page)
+
+        for athlete_id, athlete_info in ATHLETES.items():
+            log(f"\n[*] Fetching {athlete_info['name']} (athlete {athlete_id})...")
+            try:
+                raw_runs = fetch_athlete_runs(page, athlete_id)
+            except Exception as e:
+                log(f"[-] Error fetching {athlete_info['name']}: {e}")
+                log(traceback.format_exc())
+                continue
+
+            log(f"[*] {athlete_info['name']}: {len(raw_runs)} raw runs")
+            if not raw_runs:
+                log(f"[!] No runs returned for {athlete_info['name']}")
+                continue
+
+            if raw_runs and isinstance(raw_runs[0], dict):
+                log(f"[*] First run keys: {list(raw_runs[0].keys())}")
+                log(f"[*] First run: {json.dumps(raw_runs[0], default=str)[:300]}")
+
+            runs = parse_runs(raw_runs)
+            if not runs:
+                log(f"[!] No valid runs parsed for {athlete_info['name']}")
+                continue
+
+            alphabet_status, alphabet_map, letters_data = group_by_alphabet(runs)
+            all_data[athlete_id] = {
+                'name': athlete_info['name'],
+                'athlete_id': athlete_id,
+                'location': athlete_info['location'],
+                'total_runs': len(runs),
+                'alphabet_status': alphabet_status,
+                'runs_per_letter': {ltr: len(r) for ltr, r in letters_data.items()},
+                'last_updated': datetime.now().isoformat()
+            }
+
+            log(f"\n[+] {athlete_info['name']} Summary:")
+            for alph_key, alph_data in alphabet_status.items():
+                alph_num = alph_key.split('_')[1]
+                letters_str = ', '.join(alph_data['letters'][:5])
+                if len(alph_data['letters']) > 5:
+                    letters_str += '...'
+                log(f"    Alphabet {alph_num}: {alph_data['completed']}/26 ({letters_str})")
+
+        page.close()
+        return all_data
+
+    finally:
+        browser.close()
 
 
 def main():
@@ -144,13 +269,12 @@ def main():
     log("PARKRUN DATA SCRAPER - Python Playwright")
     log("=" * 70)
 
-    # APIFY_TOKEN is optional — used for residential proxy if available
     apify_token = os.environ.get('APIFY_TOKEN', '')
-    use_proxy = bool(apify_token)
-    if use_proxy:
-        log(f"[*] APIFY_TOKEN present (len={len(apify_token)}) — will use residential proxy")
+    if apify_token:
+        prefix = apify_token[:10] if len(apify_token) >= 10 else apify_token
+        log(f"[*] APIFY_TOKEN present (len={len(apify_token)}, prefix={prefix})")
     else:
-        log("[*] No APIFY_TOKEN — trying direct connection (no proxy)")
+        log("[*] No APIFY_TOKEN set")
 
     try:
         from playwright.sync_api import sync_playwright
@@ -161,105 +285,36 @@ def main():
 
     all_data = {}
 
-    proxy_config = None
-    if use_proxy:
-        # Apify proxy: username='auto' uses best available proxies for the plan.
-        # For residential specifically use 'groups-RESIDENTIAL' (requires paid plan).
-        # Password is Apify API token (same as proxy password for personal accounts).
-        proxy_config = {
-            'server': 'http://proxy.apify.com:8000',
-            'username': 'auto',
-            'password': apify_token,
-        }
-
-    try:
-        with sync_playwright() as pw:
-            browser = launch_browser(pw, proxy_config)
-            context = browser.new_context(
-                user_agent=(
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                    'AppleWebKit/537.36 (KHTML, like Gecko) '
-                    'Chrome/120.0.0.0 Safari/537.36'
-                ),
-                viewport={'width': 1280, 'height': 800},
-                locale='en-GB',
-            )
-
-            # Warm up: visit homepage so WAF can execute its JS challenge
-            # and set the aws-waf-token cookie in the browser context.
-            log("[*] Warming up: visiting parkrun.org.uk homepage...")
-            warmup_page = context.new_page()
+    with sync_playwright() as pw:
+        # Attempt 1: Apify residential proxy (if token available)
+        if apify_token:
+            proxy_config = {
+                'server': 'http://proxy.apify.com:8000',
+                'username': 'auto',
+                'password': apify_token,
+            }
             try:
-                warmup_page.goto(
-                    'https://www.parkrun.org.uk/',
-                    wait_until='domcontentloaded',
-                    timeout=60000
-                )
-                log(f"[*] Homepage title: {warmup_page.title()}")
-                # Allow JS WAF challenge to execute and set cookies
-                warmup_page.wait_for_timeout(8000)
-                cookies = context.cookies()
-                log(f"[*] Cookies after warmup: {len(cookies)}")
-                for c in cookies:
-                    log(f"[*]   Cookie: {c['name']}={c['value'][:20]}... domain={c['domain']}")
+                all_data = run_scraper(pw, proxy_config)
+                if all_data:
+                    log("[+] Proxy scrape succeeded")
+                else:
+                    log("[!] Proxy scrape returned no data")
             except Exception as e:
-                log(f"[!] Homepage warmup error: {e}")
-            finally:
-                warmup_page.close()
+                log(f"[-] Proxy scrape error: {e}")
+                log(traceback.format_exc())
 
-            # Fetch data for each athlete
-            page = context.new_page()
-            for athlete_id, athlete_info in ATHLETES.items():
-                log(f"\n[*] Fetching {athlete_info['name']} (athlete {athlete_id})...")
-                try:
-                    raw_runs = fetch_athlete_runs(page, athlete_id)
-                except Exception as e:
-                    log(f"[-] Error fetching {athlete_info['name']}: {e}")
-                    log(traceback.format_exc())
-                    continue
-
-                log(f"[*] {athlete_info['name']}: {len(raw_runs)} raw runs")
-                if not raw_runs:
-                    log(f"[!] No runs returned for {athlete_info['name']}")
-                    continue
-
-                if raw_runs and isinstance(raw_runs[0], dict):
-                    log(f"[*] First run keys: {list(raw_runs[0].keys())}")
-                    log(f"[*] First run: {json.dumps(raw_runs[0], default=str)[:300]}")
-
-                runs = parse_runs(raw_runs)
-                if not runs:
-                    log(f"[!] No valid runs parsed for {athlete_info['name']}")
-                    continue
-
-                alphabet_status, alphabet_map, letters_data = group_by_alphabet(runs)
-
-                all_data[athlete_id] = {
-                    'name': athlete_info['name'],
-                    'athlete_id': athlete_id,
-                    'location': athlete_info['location'],
-                    'total_runs': len(runs),
-                    'alphabet_status': alphabet_status,
-                    'runs_per_letter': {ltr: len(r) for ltr, r in letters_data.items()},
-                    'last_updated': datetime.now().isoformat()
-                }
-
-                log(f"\n[+] {athlete_info['name']} Summary:")
-                for alph_key, alph_data in alphabet_status.items():
-                    alph_num = alph_key.split('_')[1]
-                    letters_str = ', '.join(alph_data['letters'][:5])
-                    if len(alph_data['letters']) > 5:
-                        letters_str += '...'
-                    log(f"    Alphabet {alph_num}: {alph_data['completed']}/26 ({letters_str})")
-
-            page.close()
-            browser.close()
-
-    except Exception as e:
-        log(f"[-] Playwright error: {e}")
-        log(traceback.format_exc())
-        save_debug()
-        sys.exit(1)
+        # Attempt 2: Direct connection with stealth (fallback or if no token)
+        if not all_data:
+            log("\n[*] Falling back to direct connection with stealth...")
+            try:
+                all_data = run_scraper(pw, proxy_config=None)
+                if all_data:
+                    log("[+] Direct scrape succeeded")
+                else:
+                    log("[!] Direct scrape returned no data")
+            except Exception as e:
+                log(f"[-] Direct scrape error: {e}")
+                log(traceback.format_exc())
 
     save_debug()
 
@@ -269,7 +324,7 @@ def main():
         log(f"\n[+] Saved to parkrun-data.json")
         sys.exit(0)
     else:
-        log(f"\n[!] No data collected")
+        log(f"\n[!] No data collected from any attempt")
         sys.exit(1)
 
 
