@@ -36,7 +36,25 @@ jobs:
 
       - name: Fetch parkrun data
         run: |
-          python apify-scraper.py
+          python apify-scraper.py || true
+
+      - name: Save debug output on failure
+        if: always()
+        run: |
+          python -c "
+import requests, json
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    'Accept': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+}
+r = requests.get('https://www.parkrun.org.uk/results/athleteresultshistory/', params={'athleteNumber': '3934942', 'offset': 0, 'nbRecords': 3}, headers=HEADERS)
+print('Status:', r.status_code)
+print('Content-Type:', r.headers.get('Content-Type'))
+data = r.json()
+print(json.dumps(data, indent=2))
+" 2>&1 | tee /tmp/parkrun-debug.txt || true
+          cat /tmp/parkrun-debug.txt || true
 
       - name: Check if data changed
         id: changes
