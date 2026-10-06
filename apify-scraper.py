@@ -36,6 +36,9 @@ def fetch_athlete_runs(athlete_id):
 
         try:
             response = requests.get(PARKRUN_API, params=params, headers=HEADERS, timeout=30)
+            print(f"[*] HTTP status: {response.status_code}")
+            print(f"[*] Content-Type: {response.headers.get('Content-Type', 'unknown')}")
+            print(f"[*] Response (first 1000 chars): {response.text[:1000]}")
             response.raise_for_status()
             data = response.json()
         except requests.RequestException as e:
@@ -43,10 +46,10 @@ def fetch_athlete_runs(athlete_id):
             break
         except json.JSONDecodeError as e:
             print(f"[-] JSON decode error at offset {offset}: {e}")
-            print(f"    Response text (first 500 chars): {response.text[:500]}")
             break
 
         # Response structure: {"data": {"Results": [...]}}
+        print(f"[*] Top-level keys: {list(data.keys())}")
         results = data.get('data', {}).get('Results', [])
         print(f"[+] Got {len(results)} runs at offset {offset}")
 
@@ -65,6 +68,10 @@ def fetch_athlete_runs(athlete_id):
 
 
 def parse_runs(raw_runs):
+    if raw_runs:
+        print(f"[*] First item keys: {list(raw_runs[0].keys())}")
+        print(f"[*] First item: {json.dumps(raw_runs[0], indent=2)}")
+
     runs = []
     for item in raw_runs:
         # Field names from parkrun AJAX API
