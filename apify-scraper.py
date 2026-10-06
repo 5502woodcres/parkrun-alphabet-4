@@ -156,7 +156,7 @@ def scrape_via_scraperapi(api_key):
             letters_str = ', '.join(alph_data['letters'][:5])
             if len(alph_data['letters']) > 5:
                 letters_str += '...'
-            log(f"    Alphabet {alph_num}: {alph_data['completed']}/26 ({letters_str})")
+            log(f"    Alphabet {alph_num}: {alph_data['completed']}/25 ({letters_str})")
 
     return all_data
 
@@ -351,28 +351,56 @@ def parse_runs(raw_runs):
 CHALLENGE_LETTERS = [chr(i) for i in range(65, 91) if chr(i) != 'X']
 
 
+def normalize_course(name):
+    """Normalise a parkrun course name for deduplication.
+
+    Strips whitespace, lowercases, and removes a trailing ' parkrun'
+    suffix so that 'Cheltenham' and 'Cheltenham parkrun' collapse to
+    the same key.
+    """
+    n = name.strip().lower()
+    if n.endswith(' parkrun'):
+        n = n[:-8].strip()
+    return n
+
+
 def group_by_alphabet(runs):
     """Return alphabet status for all achievable alphabets (at least 6 shown).
 
-    Alphabet N is complete when every challenge letter has been run at
-    least N times. X is excluded — parkrun courses starting with X are
-    practically non-existent. The alphabet target is 25 letters.
+    A letter is 'earned' only by visiting a UNIQUE parkrun venue that
+    starts with that letter — revisiting the same course does not add
+    another slot. Alphabet N is complete when every challenge letter
+    has at least N distinct venues in the athlete's history.
+
+    X is excluded (practically no UK parkruns start with X).
+    The alphabet target is 25 letters.
     """
     if not runs:
         return {}, {}, {}
 
-    # Bucket runs by first letter, valid challenge letters only
-    letters = {}
+    # Bucket ALL runs by letter first
+    all_by_letter = {}
     for run in runs:
         letter = run['letter']
         if letter not in CHALLENGE_LETTERS:
             continue
-        letters.setdefault(letter, []).append(run)
+        all_by_letter.setdefault(letter, []).append(run)
 
-    # For each letter, the Nth run (chronologically) feeds alphabet N
+    # For each letter, keep only the FIRST visit to each unique course
+    # (sorted chronologically so the earliest visit claims the slot)
+    unique_courses = {}   # letter -> [one run per unique venue, sorted by date]
+    for letter, letter_runs in all_by_letter.items():
+        seen = {}
+        for run in sorted(letter_runs, key=lambda x: x['date']):
+            key = normalize_course(run['course'])
+            if key and key not in seen:
+                seen[key] = run
+        unique_courses[letter] = list(seen.values())
+
+    # For each letter, the Nth unique venue (chronologically) feeds alphabet N
     alphabet_map = {}
-    for letter in sorted(letters.keys()):
-        for idx, run in enumerate(sorted(letters[letter], key=lambda x: x['date'])):
+    for letter in sorted(unique_courses.keys()):
+        for idx, run in enumerate(unique_courses[letter]):
             n = idx + 1
             alphabet_map.setdefault(n, []).append(letter)
 
@@ -391,17 +419,18 @@ def group_by_alphabet(runs):
     for n in range(1, max_show + 1):
         done = set(alphabet_map.get(n, []))
         remaining = [l for l in CHALLENGE_LETTERS if l not in done]
-        runs_needed = {l: n - len(letters.get(l, [])) for l in remaining}
+        # runs_needed = how many more unique venues are required per missing letter
+        runs_needed = {l: n - len(unique_courses.get(l, [])) for l in remaining}
         result[f'alphabet_{n}'] = {
             'letters': sorted(done),
             'completed': len(done),
             'total': len(CHALLENGE_LETTERS),
             'remaining': sorted(remaining),
-            'runs_needed': runs_needed,        # how many more per missing letter
+            'runs_needed': runs_needed,
             'is_complete': len(remaining) == 0,
         }
 
-    return result, alphabet_map, letters
+    return result, alphabet_map, unique_courses
 
 
 def run_scraper(pw, proxy_config=None):
@@ -479,7 +508,7 @@ def run_scraper(pw, proxy_config=None):
                 letters_str = ', '.join(alph_data['letters'][:5])
                 if len(alph_data['letters']) > 5:
                     letters_str += '...'
-                log(f"    Alphabet {alph_num}: {alph_data['completed']}/26 ({letters_str})")
+                log(f"    Alphabet {alph_num}: {alph_data['completed']}/25 ({letters_str})")
 
         page.close()
         return all_data
@@ -561,7 +590,7 @@ def run_scraper_patchright(proxy_config=None):
                     letters_str = ', '.join(alph_data['letters'][:5])
                     if len(alph_data['letters']) > 5:
                         letters_str += '...'
-                    log(f"    Alphabet {alph_num}: {alph_data['completed']}/26 ({letters_str})")
+                    log(f"    Alphabet {alph_num}: {alph_data['completed']}/25 ({letters_str})")
 
             page.close()
             return all_data
