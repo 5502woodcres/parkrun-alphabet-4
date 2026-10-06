@@ -429,7 +429,8 @@ function renderJointPlanner() {
 
     if (athletes.length < 2) return;
 
-    const [lisa, beth] = athletes;
+    const lisa = athletes.find(a => a.name === 'Lisa');
+    const beth = athletes.find(a => a.name === 'Beth');
     const allRemaining = new Set([...lisa.remaining, ...beth.remaining]);
     const sorted = [...allRemaining].sort();
 
