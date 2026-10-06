@@ -87,6 +87,68 @@ def warmup_context(context):
         warmup_page.close()
 
 
+def fetch_athlete_via_html(context, athlete_id):
+    """Navigate to the HTML athlete results page and parse the table.
+
+    Used as fallback when the AJAX endpoint is WAF-blocked (405).
+    The HTML page returns 200 + JS challenge, which Playwright can solve.
+    """
+    url = f'https://www.parkrun.org.uk/parkrunner/{athlete_id}/all/'
+    log(f"[*] HTML fallback: navigating to {url}")
+    page = context.new_page()
+    apply_stealth(page)
+    try:
+        page.goto(url, wait_until='domcontentloaded', timeout=60000)
+        log(f"[*] HTML page title (initial): {page.title()}")
+
+        # Wait for WAF JS challenge to redirect away
+        try:
+            page.wait_for_function(
+                "document.title !== 'Human Verification'",
+                timeout=20000
+            )
+            log(f"[*] HTML page title (after WAF): {page.title()}")
+        except Exception:
+            log(f"[!] WAF challenge did not resolve — title: {page.title()}")
+
+        page.wait_for_timeout(3000)
+
+        # Try to find the results table rows
+        rows = page.query_selector_all('table#results tbody tr')
+        if not rows:
+            rows = page.query_selector_all('table.sortable tbody tr')
+        if not rows:
+            rows = page.query_selector_all('tbody tr')
+        log(f"[*] HTML rows found: {len(rows)}")
+
+        runs = []
+        for row in rows:
+            cells = row.query_selector_all('td')
+            if len(cells) < 2:
+                continue
+            # parkrun table: Event | Run Date | Position | Time | Age Grade | PB
+            course = cells[0].inner_text().strip()
+            date_str = cells[1].inner_text().strip() if len(cells) > 1 else ''
+            time_str = cells[3].inner_text().strip() if len(cells) > 3 else ''
+            if not course or not date_str:
+                continue
+            letter = course[0].upper()
+            runs.append({
+                'date': date_str,
+                'course': course,
+                'time': time_str,
+                'letter': letter
+            })
+
+        log(f"[*] HTML parsed {len(runs)} runs for athlete {athlete_id}")
+        return runs
+    except Exception as e:
+        log(f"[-] HTML fetch error for {athlete_id}: {e}")
+        return []
+    finally:
+        page.close()
+
+
 def fetch_athlete_runs(page, athlete_id):
     """Fetch all runs for an athlete using an existing Playwright page."""
     all_runs = []
@@ -217,25 +279,31 @@ def run_scraper(pw, proxy_config=None):
 
         for athlete_id, athlete_info in ATHLETES.items():
             log(f"\n[*] Fetching {athlete_info['name']} (athlete {athlete_id})...")
+            runs = None
+
+            # Try AJAX endpoint first
             try:
                 raw_runs = fetch_athlete_runs(page, athlete_id)
+                log(f"[*] {athlete_info['name']}: {len(raw_runs)} raw runs via AJAX")
+                if raw_runs and isinstance(raw_runs[0], dict):
+                    log(f"[*] First run keys: {list(raw_runs[0].keys())}")
+                    log(f"[*] First run: {json.dumps(raw_runs[0], default=str)[:300]}")
+                if raw_runs:
+                    runs = parse_runs(raw_runs)
             except Exception as e:
-                log(f"[-] Error fetching {athlete_info['name']}: {e}")
-                log(traceback.format_exc())
-                continue
+                log(f"[-] AJAX error for {athlete_info['name']}: {e}")
 
-            log(f"[*] {athlete_info['name']}: {len(raw_runs)} raw runs")
-            if not raw_runs:
-                log(f"[!] No runs returned for {athlete_info['name']}")
-                continue
-
-            if raw_runs and isinstance(raw_runs[0], dict):
-                log(f"[*] First run keys: {list(raw_runs[0].keys())}")
-                log(f"[*] First run: {json.dumps(raw_runs[0], default=str)[:300]}")
-
-            runs = parse_runs(raw_runs)
+            # Fall back to HTML scraping if AJAX gave nothing
             if not runs:
-                log(f"[!] No valid runs parsed for {athlete_info['name']}")
+                log(f"[*] Trying HTML fallback for {athlete_info['name']}...")
+                html_runs = fetch_athlete_via_html(context, athlete_id)
+                if html_runs:
+                    runs = html_runs  # already parsed, just need parse_runs for date normalisation
+                    log(f"[*] HTML fallback returned {len(runs)} runs")
+
+            if not runs:
+            if not runs:
+                log(f"[!] No runs obtained for {athlete_info['name']} (AJAX + HTML both failed)")
                 continue
 
             alphabet_status, alphabet_map, letters_data = group_by_alphabet(runs)
