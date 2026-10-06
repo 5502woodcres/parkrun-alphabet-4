@@ -5,7 +5,7 @@ import sys
 from datetime import datetime
 
 APIFY_TOKEN = None
-APIFY_ACTOR_ID = '5lljkHZ8Jh1vf2NHc'  # Correct actor ID
+APIFY_ACTOR_ID = '5lljkHZ8Jh1vf2NHc'
 
 ATHLETES = {
     'a3934942': {'name': 'Lisa', 'location': 'Chepstow'},
@@ -28,11 +28,31 @@ def fetch_from_apify(athlete_id):
     }
     
     try:
+        print(f"[*] Calling: {url}")
+        print(f"[*] Payload: {payload}")
         response = requests.post(url, json=payload, headers=headers, timeout=120)
+        
+        print(f"[*] Status: {response.status_code}")
+        print(f"[*] Response text: {response.text[:500]}")
+        
         response.raise_for_status()
-        return response.json()
+        
+        if response.text:
+            return response.json()
+        else:
+            print(f"[-] Empty response from API")
+            return None
+            
+    except requests.exceptions.HTTPError as e:
+        print(f"[-] HTTP Error: {e}")
+        print(f"[-] Response: {response.text}")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"[-] JSON Parse Error: {e}")
+        print(f"[-] Raw response: {response.text}")
+        return None
     except requests.RequestException as e:
-        print(f"[-] Error: {e}")
+        print(f"[-] Request Error: {e}")
         return None
 
 def parse_athlete_data(apify_response, athlete_id, athlete_info):
