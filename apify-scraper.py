@@ -29,7 +29,6 @@ def fetch_from_apify(athlete_id):
     }
 
     try:
-        print(f"[*] Starting async run...")
         response = requests.post(url, json=payload, headers=headers, timeout=10)
         response.raise_for_status()
 
@@ -37,25 +36,50 @@ def fetch_from_apify(athlete_id):
         run_id = run_data.get('data', {}).get('id')
 
         if not run_id:
-            print(f"[-] No run ID in response")
+            print(f"[-] No run ID in response: {run_data}")
             return None
 
         print(f"[*] Run ID: {run_id}")
-        print(f"[*] Waiting for results...")
+        print(f"[*] Polling run status every 5s (max 10 min)...")
 
         for attempt in range(120):
-            time.sleep(1)
+            time.sleep(5)
 
-            result_url = f'https://api.apify.com/v2/runs/{run_id}/dataset/items'
-            result_response = requests.get(result_url, headers=headers, timeout=10)
+            status_url = f'https://api.apify.com/v2/runs/{run_id}'
+            status_response = requests.get(status_url, headers=headers, timeout=10)
 
-            if result_response.status_code == 200:
-                items = result_response.json()
-                if items:
-                    print(f"[+] Got {len(items)} results")
+            if status_response.status_code != 200:
+                print(f"[*] Status check failed: {status_response.status_code}")
+                continue
+
+            run_info = status_response.json().get('data', {})
+            status = run_info.get('status')
+            print(f"[*] Attempt {attempt+1}: Status = {status}")
+
+            if status == 'SUCCEEDED':
+                dataset_id = run_info.get('defaultDatasetId')
+                print(f"[+] Run succeeded. Fetching dataset {dataset_id}...")
+
+                dataset_url = f'https://api.apify.com/v2/datasets/{dataset_id}/items'
+                dataset_response = requests.get(dataset_url, headers=headers, timeout=30)
+
+                if dataset_response.status_code == 200:
+                    items = dataset_response.json()
+                    print(f"[+] Got {len(items)} items")
+                    if items:
+                        print(f"[*] Sample item keys: {list(items[0].keys())}")
+                        print(f"[*] Sample item: {json.dumps(items[0], indent=2)}")
                     return {'items': items}
+                else:
+                    print(f"[-] Dataset fetch failed: {dataset_response.status_code}")
+                    return None
 
-        print(f"[-] Timeout waiting for results")
+            elif status in ('FAILED', 'ABORTED', 'TIMED-OUT'):
+                print(f"[-] Run ended with status: {status}")
+                print(f"[-] Run details: {json.dumps(run_info, indent=2)}")
+                return None
+
+        print(f"[-] Timeout after 10 minutes")
         return None
 
     except requests.RequestException as e:
