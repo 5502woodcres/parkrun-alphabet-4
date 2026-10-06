@@ -167,16 +167,7 @@ def get_or_create_actor(token):
             break
 
     if actor_id:
-        # Verify it has a successful 'latest' build
-        try:
-            builds = api_get(f'/acts/{actor_id}/builds?tag=latest&limit=1', token)
-            items = builds.get('data', {}).get('items', [])
-            if items and items[0].get('status') == 'SUCCEEDED':
-                log(f"[+] Actor has valid latest build — skipping rebuild")
-                return actor_id
-            log(f"[!] No valid latest build found — rebuilding actor")
-        except Exception as e:
-            log(f"[!] Could not check builds: {e} — rebuilding actor")
+        log(f"[*] Updating source and rebuilding actor")
         return build_actor(token, actor_id)
 
     # Create actor from scratch
