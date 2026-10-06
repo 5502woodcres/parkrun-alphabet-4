@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Parkrun scraper: Python Playwright + Apify residential proxy to bypass AWS WAF."""
+"""Parkrun scraper: Python Playwright headless browser to bypass AWS WAF JS challenge."""
 import sys
 import json
 import os
-import time
 import traceback
 from datetime import datetime
 
@@ -56,8 +55,10 @@ def fetch_athlete_runs(page, athlete_id):
 
         # If we got HTML instead of JSON, the WAF challenge page wasn't solved
         if body_text.lstrip().startswith('<'):
-            log(f"[!]   Got HTML (WAF challenge?) — title: "
-                f"{body_text[body_text.find('<title>')+7:body_text.find('</title>')][:80] if '<title>' in body_text else 'N/A'}")
+            title = 'N/A'
+            if '<title>' in body_text:
+                title = body_text[body_text.find('<title>')+7:body_text.find('</title>')][:80]
+            log(f"[!]   Got HTML (WAF challenge?) — title: {title}")
             break
 
         try:
@@ -127,43 +128,50 @@ def group_by_alphabet(runs):
     return result, alphabet_map, letters
 
 
+def launch_browser(pw, proxy_config=None):
+    """Launch Chromium with optional proxy."""
+    launch_args = {
+        'headless': True,
+        'args': ['--no-sandbox', '--disable-setuid-sandbox'],
+    }
+    if proxy_config:
+        launch_args['proxy'] = proxy_config
+    return pw.chromium.launch(**launch_args)
+
+
 def main():
     log("=" * 70)
-    log("PARKRUN DATA SCRAPER - Python Playwright + Apify Proxy")
+    log("PARKRUN DATA SCRAPER - Python Playwright")
     log("=" * 70)
 
-    apify_token = os.environ.get('APIFY_TOKEN')
-    if not apify_token:
-        log("[-] APIFY_TOKEN not set — aborting")
-        save_debug()
-        sys.exit(1)
-    log(f"[*] APIFY_TOKEN present, length={len(apify_token)}")
-
-    # Apify residential proxy
-    proxy_server = 'http://proxy.apify.com:8000'
-    proxy_username = 'groups-RESIDENTIAL'
-    proxy_password = apify_token
-    log(f"[*] Proxy: {proxy_server} (RESIDENTIAL)")
+    # APIFY_TOKEN is optional — used for residential proxy if available
+    apify_token = os.environ.get('APIFY_TOKEN', '')
+    use_proxy = bool(apify_token)
+    if use_proxy:
+        log(f"[*] APIFY_TOKEN present (len={len(apify_token)}) — will use residential proxy")
+    else:
+        log("[*] No APIFY_TOKEN — trying direct connection (no proxy)")
 
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        log("[-] playwright not installed — run: pip install playwright && playwright install chromium")
+        log("[-] playwright not installed")
         save_debug()
         sys.exit(1)
 
     all_data = {}
 
+    proxy_config = None
+    if use_proxy:
+        proxy_config = {
+            'server': 'http://proxy.apify.com:8000',
+            'username': 'groups-RESIDENTIAL',
+            'password': apify_token,
+        }
+
     try:
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(
-                headless=True,
-                proxy={
-                    'server': proxy_server,
-                    'username': proxy_username,
-                    'password': proxy_password,
-                }
-            )
+            browser = launch_browser(pw, proxy_config)
             context = browser.new_context(
                 user_agent=(
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
@@ -174,17 +182,20 @@ def main():
                 locale='en-GB',
             )
 
-            # Warm up: visit homepage so WAF can issue its challenge cookie
+            # Warm up: visit homepage so WAF can execute its JS challenge
+            # and set the aws-waf-token cookie in the browser context.
             log("[*] Warming up: visiting parkrun.org.uk homepage...")
             warmup_page = context.new_page()
             try:
                 warmup_page.goto(
                     'https://www.parkrun.org.uk/',
                     wait_until='domcontentloaded',
-                    timeout=30000
+                    timeout=60000
                 )
                 log(f"[*] Homepage title: {warmup_page.title()}")
-                warmup_page.wait_for_timeout(3000)  # allow JS challenge to run
+                # Allow JS WAF challenge to execute and set cookies
+                warmup_page.wait_for_timeout(5000)
+                log(f"[*] Cookies after warmup: {len(context.cookies())}")
             except Exception as e:
                 log(f"[!] Homepage warmup error: {e}")
             finally:
