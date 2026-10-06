@@ -33,52 +33,76 @@ jobs:
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
         run: |
-          date -u > debug-run.txt
-          echo "APIFY_TOKEN length: ${#APIFY_TOKEN}" >> debug-run.txt
           rm -f parkrun-data.json
-          echo "--- script output ---" >> debug-run.txt
-          python apify-scraper.py >> debug-run.txt 2>&1 || echo "script exited non-zero" >> debug-run.txt
-          echo "parkrun-data.json: $(ls parkrun-data.json 2>/dev/null && echo YES || echo NO)" >> debug-run.txt
-          echo "done $(date -u)" >> debug-run.txt
-          cat debug-run.txt
+          python apify-scraper.py || true
+          echo "parkrun-data.json: $(ls parkrun-data.json 2>/dev/null && echo YES || echo NO)"
+          echo "debug-scraper.json: $(ls debug-scraper.json 2>/dev/null && echo YES || echo NO)"
 
-      - name: Publish debug log
+      - name: Upload debug-scraper.json
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "## Debug log" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          cat debug-run.txt >> $GITHUB_STEP_SUMMARY || echo "(debug-run.txt missing)" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "---" >> $GITHUB_STEP_SUMMARY
+          python3 - << 'PYEOF'
+          import base64, json, os, sys
+          try:
+              import requests as req
+          except ImportError:
+              import urllib.request as req
+              req = None
+          import urllib.request, urllib.error
 
-          if [ ! -f debug-run.txt ]; then
-            echo "WARNING: debug-run.txt not found" >> $GITHUB_STEP_SUMMARY
-            exit 0
-          fi
+          fname = 'debug-scraper.json'
+          repo = os.environ.get('GITHUB_REPOSITORY', '')
+          token = os.environ.get('GITHUB_TOKEN', '')
+          print(f'repo={repo!r} token_len={len(token)} file={fname}')
 
-          CONTENT=$(base64 -w 0 debug-run.txt)
-          SHA=$(curl -sf \
-               -H "Authorization: token $GITHUB_TOKEN" \
-               -H "Accept: application/vnd.github+json" \
-               "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/debug-run.txt" \
-               | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || echo "")
+          if not token:
+              print('ERROR: GITHUB_TOKEN not set'); sys.exit(1)
+          if not os.path.exists(fname):
+              print(f'ERROR: {fname} not found'); sys.exit(0)
 
-          if [ -n "$SHA" ]; then
-            PAYLOAD=$(printf '{"message":"debug: run log","content":"%s","sha":"%s"}' "$CONTENT" "$SHA")
-          else
-            PAYLOAD=$(printf '{"message":"debug: run log","content":"%s"}' "$CONTENT")
-          fi
+          with open(fname, 'rb') as f:
+              content = base64.b64encode(f.read()).decode()
+          print(f'content_len={len(content)}')
 
-          HTTP=$(curl -s -o /tmp/resp.json -w "%{http_code}" -X PUT \
-               -H "Authorization: token $GITHUB_TOKEN" \
-               -H "Accept: application/vnd.github+json" \
-               -H "Content-Type: application/json" \
-               "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/debug-run.txt" \
-               -d "$PAYLOAD")
-          echo "Upload HTTP: $HTTP" >> $GITHUB_STEP_SUMMARY
-          cat /tmp/resp.json | python3 -c "import json,sys; d=json.load(sys.stdin); print('commit:', d.get('commit',{}).get('sha','?')[:8])" 2>/dev/null || true
+          url = f'https://api.github.com/repos/{repo}/contents/{fname}'
+          hdrs = {'Authorization': f'token {token}',
+                  'Accept': 'application/vnd.github+json',
+                  'Content-Type': 'application/json'}
+
+          # GET existing SHA
+          try:
+              r = urllib.request.Request(url, headers=hdrs)
+              with urllib.request.urlopen(r) as resp:
+                  sha = json.loads(resp.read()).get('sha', '')
+              print(f'existing_sha={sha[:10]}')
+          except urllib.error.HTTPError as e:
+              if e.code == 404:
+                  sha = ''; print('file not in repo yet - creating')
+              else:
+                  print(f'GET err {e.code}: {e.read().decode()[:200]}'); sha = ''
+          except Exception as e:
+              print(f'GET exception: {e}'); sha = ''
+
+          payload = {'message': 'debug: scraper log', 'content': content}
+          if sha:
+              payload['sha'] = sha
+
+          data = json.dumps(payload).encode()
+          r = urllib.request.Request(url, data=data, headers=hdrs, method='PUT')
+          try:
+              with urllib.request.urlopen(r) as resp:
+                  result = json.loads(resp.read())
+                  print('SUCCESS commit:', result.get('commit', {}).get('sha', '')[:8])
+          except urllib.error.HTTPError as e:
+              body = e.read().decode()[:400]
+              print(f'PUT HTTP {e.code}: {body}')
+              sys.exit(1)
+          except Exception as e:
+              print(f'PUT exception: {e}')
+              sys.exit(1)
+          PYEOF
 
       - name: Check for data and upload
         env:
@@ -88,6 +112,6 @@ jobs:
             echo "Data generated - uploading"
             python gh-upload.py parkrun-data.json parkrun-data.json "chore: auto-update parkrun data - {ts}"
           else
-            echo "No data generated - see debug-run.txt in repo"
+            echo "No data generated - check debug-scraper.json in repo"
             exit 1
           fi
