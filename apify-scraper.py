@@ -97,17 +97,42 @@ def api_post(path, token, data=None, extra_params=None):
     return r.json()
 
 
+def api_put(path, token, data=None):
+    r = requests.put(
+        f'{APIFY_BASE}{path}',
+        headers=_auth_headers(token),
+        json=data,
+        timeout=60
+    )
+    if not r.ok:
+        log(f"[-] API error {r.status_code}: {r.text[:300]}")
+    r.raise_for_status()
+    return r.json()
+
+
+SOURCE_FILES_PAYLOAD = {
+    'versionNumber': '0.0',
+    'sourceType': 'SOURCE_FILES',
+    'buildTag': 'latest',
+    'sourceFiles': [
+        {'name': 'src/main.js', 'format': 'TEXT', 'content': ACTOR_JS},
+        {'name': 'package.json', 'format': 'TEXT', 'content': PACKAGE_JSON},
+    ]
+}
+
+
 def build_actor(token, actor_id):
-    """Upload source code and build the actor. Returns actor_id."""
-    api_post(f'/acts/{actor_id}/versions', token, {
-        'versionNumber': '0.0',
-        'sourceType': 'SOURCE_FILES',
-        'buildTag': 'latest',
-        'sourceFiles': [
-            {'name': 'src/main.js', 'format': 'TEXT', 'content': ACTOR_JS},
-            {'name': 'package.json', 'format': 'TEXT', 'content': PACKAGE_JSON},
-        ]
-    })
+    """Upload/update source code and build the actor. Returns actor_id."""
+    try:
+        api_post(f'/acts/{actor_id}/versions', token, SOURCE_FILES_PAYLOAD)
+        log("[+] Source version created")
+    except requests.exceptions.HTTPError as e:
+        if e.response is not None and e.response.status_code == 403 and 'version-already-exists' in (e.response.text or ''):
+            log("[*] Version 0.0 already exists — updating via PUT")
+            api_put(f'/acts/{actor_id}/versions/0.0', token, SOURCE_FILES_PAYLOAD)
+            log("[+] Source version updated")
+        else:
+            raise
     log("[+] Source uploaded")
 
     build_id = api_post(f'/acts/{actor_id}/builds', token, extra_params={
