@@ -9,6 +9,8 @@ import sys
 import json
 import os
 import traceback
+import urllib.request
+import urllib.error
 from datetime import datetime
 
 ATHLETES = {
@@ -340,6 +342,22 @@ def main():
     if apify_token:
         prefix = apify_token[:10] if len(apify_token) >= 10 else apify_token
         log(f"[*] APIFY_TOKEN present (len={len(apify_token)}, prefix={prefix})")
+
+        # Verify the token against Apify REST API (independent of proxy access)
+        try:
+            req = urllib.request.Request(
+                'https://api.apify.com/v2/users/me',
+                headers={'Authorization': f'Bearer {apify_token}'}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read())
+                username = body.get('data', {}).get('username', 'unknown')
+                plan = body.get('data', {}).get('plan', {}).get('id', 'unknown')
+                log(f"[+] Apify token VALID — user: {username}, plan: {plan}")
+        except urllib.error.HTTPError as e:
+            log(f"[!] Apify token INVALID — API returned {e.code}: {e.reason}")
+        except Exception as e:
+            log(f"[!] Apify token check failed: {e}")
     else:
         log("[*] No APIFY_TOKEN set")
 
