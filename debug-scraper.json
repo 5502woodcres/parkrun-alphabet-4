@@ -7,10 +7,10 @@
     "[+] Found existing actor: RnYQAo4TgfbLEv9xv",
     "[+] Actor has valid latest build \u2014 skipping rebuild",
     "[*] Running actor RnYQAo4TgfbLEv9xv...",
-    "[*] Run ID: t8ZAfdyItbFGh6fsG",
+    "[*] Run ID: 9xNnFLfSe98cqDksr",
     "[*]   run status: FAILED (10s)",
-    "[*] Actor run log:\n2026-10-06T14:37:32.229Z ACTOR: Pulling container image of build ASm1YP0lecOCW5Luy from registry.\n2026-10-06T14:37:32.235Z ACTOR: Creating container.\n2026-10-06T14:37:32.390Z ACTOR: Starting container.\n2026-10-06T14:37:32.483Z ACTOR: Running under \"LIMITED_PERMISSIONS\".\n",
+    "[*] Actor run log:\n2026-10-06T14:39:51.897Z ACTOR: Pulling container image of build ASm1YP0lecOCW5Luy from registry.\n2026-10-06T14:39:51.900Z ACTOR: Creating container.\n2026-10-06T14:39:51.974Z ACTOR: Starting container.\n2026-10-06T14:39:51.976Z ACTOR: Running under \"LIMITED_PERMISSIONS\".\n",
     "[-] Actor error: Run failed: FAILED",
-    "Traceback (most recent call last):\n  File \"/home/runner/work/parkrun-alphabet-4/parkrun-alphabet-4/apify-scraper.py\", line 311, in main\n    raw_output = run_actor(apify_token, actor_id)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/parkrun-alphabet-4/parkrun-alphabet-4/apify-scraper.py\", line 231, in run_actor\n    raise Exception(f\"Run failed: {status}\")\nException: Run failed: FAILED\n"
+    "Traceback (most recent call last):\n  File \"/home/runner/work/parkrun-alphabet-4/parkrun-alphabet-4/apify-scraper.py\", line 312, in main\n    raw_output = run_actor(apify_token, actor_id)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/parkrun-alphabet-4/parkrun-alphabet-4/apify-scraper.py\", line 232, in run_actor\n    raise Exception(f\"Run failed: {status}\")\nException: Run failed: FAILED\n"
   ]
 }
