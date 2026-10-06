@@ -53,6 +53,7 @@ PACKAGE_JSON = json.dumps({
     "name": "parkrun-data-fetcher",
     "version": "0.0.1",
     "type": "module",
+    "scripts": {"start": "node src/main.js"},
     "dependencies": {"apify": "^3.0.0"}
 })
 
