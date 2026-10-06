@@ -196,6 +196,57 @@
             border: 1px solid var(--border);
         }
 
+        /* ── Travel Planner ── */
+        .travel-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 12px;
+        }
+        .tc {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px 16px 14px;
+            border-left-width: 3px;
+        }
+        .tc-both { border-left-color: var(--orange); }
+        .tc-lisa  { border-left-color: var(--green); }
+        .tc-beth  { border-left-color: var(--blue); }
+        .tc-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+        .tc-ltr { font-size: 40px; font-weight: 700; line-height: 1; flex-shrink: 0; }
+        .tc-both .tc-ltr { color: var(--orange); }
+        .tc-lisa .tc-ltr  { color: var(--green); }
+        .tc-beth .tc-ltr  { color: var(--blue); }
+        .tc-meta { flex: 1; min-width: 0; }
+        .tc-venue { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tc-pc { font-size: 12px; color: var(--grey); margin-top: 1px; }
+        .tc-who {
+            font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+            padding: 3px 8px; border-radius: 99px; flex-shrink: 0; margin-top: 2px;
+        }
+        .tc-both .tc-who { background: var(--orange-light); color: var(--orange); }
+        .tc-lisa .tc-who  { background: var(--green-light); color: var(--green); }
+        .tc-beth .tc-who  { background: var(--blue-light);  color: var(--blue); }
+        .tc-times { display: flex; flex-direction: column; gap: 5px; }
+        .tc-row { display: flex; align-items: baseline; gap: 7px; font-size: 13px; color: var(--grey); }
+        .tc-val { font-size: 15px; font-weight: 700; color: #1a1a1a; font-variant-numeric: tabular-nums; }
+        .tc-note { margin-top: 7px; font-size: 11px; color: var(--grey); font-style: italic; }
+        .tc-abroad { font-size: 13px; color: var(--grey); padding: 4px 0; font-style: italic; }
+
+        /* ── Map ── */
+        #alpha5-map {
+            width: 100%;
+            height: 480px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+        .map-legend {
+            display: flex; flex-wrap: wrap; gap: 14px;
+            margin-top: 10px; font-size: 12px; color: var(--grey);
+        }
+        .map-leg-item { display: flex; align-items: center; gap: 6px; }
+        .map-leg-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
         /* ── Footer ── */
         .footer {
             text-align: center;
@@ -251,10 +302,23 @@
         </div>
     </section>
 
-    <!-- 4. Map -->
+    <!-- 4. Travel planner -->
     <section>
-        <h2>Home Locations</h2>
-        <div id="map"></div>
+        <h2>Alpha-5 Travel Planner</h2>
+        <p style="font-size:13px;color:var(--grey);margin:-8px 0 16px">Nearest unvisited venue per missing letter · Both together: drive from Cheltenham (or PT from W12 if Greater London) · Lisa alone: drive from Chepstow · Beth alone: both options shown</p>
+        <div class="travel-grid" id="travel-grid"></div>
+    </section>
+
+    <!-- 5. Alpha-5 map -->
+    <section>
+        <h2>Alpha-5 Target Venues</h2>
+        <div id="alpha5-map"></div>
+        <div class="map-legend">
+            <div class="map-leg-item"><div class="map-leg-dot" style="background:#e65100"></div>Both need</div>
+            <div class="map-leg-item"><div class="map-leg-dot" style="background:#2e7d32"></div>Lisa only</div>
+            <div class="map-leg-item"><div class="map-leg-dot" style="background:#1565c0"></div>Beth only</div>
+            <div class="map-leg-item"><div class="map-leg-dot" style="background:#555;border:2px solid #999"></div>Home base</div>
+        </div>
     </section>
 
     <div class="footer" id="footer"></div>
@@ -288,7 +352,8 @@ function render() {
     renderNextAlpha('alphabet_5', 'alpha5-grid', false);
     renderNextAlpha('alphabet_6', 'alpha6-grid', true);
     renderJointPlanner();
-    initMap();
+    renderTravel();
+    renderAlpha5Map();
     renderFooter();
 }
 
@@ -403,6 +468,84 @@ function initMap() {
             weight: 2,
             fillOpacity: 0.9
         }).bindPopup(`<strong>${meta.name}</strong><br>${meta.location}`).addTo(map);
+    });
+}
+
+// ── Travel Planner data (static research) ──
+const TRAVEL = [
+    {l:'A', who:'beth', venue:'Andover',        pc:'SP10', lat:51.221, lng:-1.505, drive:'~1h 0m',  driveFrom:'Cheltenham', pt:'~1h 30m', note:null},
+    {l:'D', who:'lisa', venue:'Dulwich',         pc:'SE21', lat:51.444, lng:-0.079, drive:'~2h 30m', driveFrom:'Chepstow',   pt:null,      note:'Greater London'},
+    {l:'E', who:'both', venue:'Eastleigh',       pc:'SO50', lat:50.968, lng:-1.374, drive:'~1h 25m', driveFrom:'Cheltenham', pt:null,      note:null},
+    {l:'F', who:'beth', venue:'Fordingbridge',   pc:'SP6',  lat:50.925, lng:-1.788, drive:'~1h 20m', driveFrom:'Cheltenham', pt:'~2h 30m', note:null},
+    {l:'I', who:'both', venue:'Ipswich',         pc:'IP2',  lat:52.051, lng:1.116,  drive:'~2h 20m', driveFrom:'Cheltenham', pt:null,      note:null},
+    {l:'J', who:'both', venue:'Jesmond Dene',    pc:'NE7',  lat:54.990, lng:-1.591, drive:'~3h 45m', driveFrom:'Cheltenham', pt:null,      note:'Only UK J venue'},
+    {l:'K', who:'both', venue:'Kingsbury Water', pc:'B78',  lat:52.560, lng:-1.699, drive:'~55m',    driveFrom:'Cheltenham', pt:null,      note:null},
+    {l:'N', who:'both', venue:'Northala Fields', pc:'UB5',  lat:51.540, lng:-0.377, drive:null,      driveFrom:null,         pt:'~30m',    note:'Greater London · PT from W12'},
+    {l:'O', who:'both', venue:'Osterley',        pc:'TW7',  lat:51.490, lng:-0.351, drive:null,      driveFrom:null,         pt:'~35m',    note:'Greater London · PT from W12'},
+    {l:'P', who:'beth', venue:'Prospect',        pc:'RG30', lat:51.449, lng:-1.007, drive:'~1h 5m',  driveFrom:'Cheltenham', pt:'~1h 0m',  note:'Reading'},
+    {l:'Q', who:'both', venue:'Queensway',       pc:'NN8',  lat:52.305, lng:-0.724, drive:'~1h 10m', driveFrom:'Cheltenham', pt:null,      note:'Wellingborough'},
+    {l:'R', who:'both', venue:'Rugby',           pc:'CV21', lat:52.370, lng:-1.237, drive:'~55m',    driveFrom:'Cheltenham', pt:null,      note:null},
+    {l:'U', who:'both', venue:'Upton House',     pc:'BH17', lat:50.734, lng:-2.013, drive:'~1h 35m', driveFrom:'Cheltenham', pt:null,      note:'Poole'},
+    {l:'Z', who:'both', venue:null,              pc:null,   lat:null,   lng:null,   drive:null,      driveFrom:null,         pt:null,      note:'Nearest venues are all abroad — plan a trip!'},
+];
+
+function renderTravel() {
+    const grid = document.getElementById('travel-grid');
+    TRAVEL.forEach(t => {
+        const card = document.createElement('div');
+        card.className = `tc tc-${t.who}`;
+        const whoLabel = t.who === 'both' ? 'Both' : t.who === 'lisa' ? 'Lisa' : 'Beth';
+        if (!t.venue) {
+            card.innerHTML = `<div class="tc-head"><div class="tc-ltr">${t.l}</div><div class="tc-who">${whoLabel}</div></div><div class="tc-abroad">✈ ${t.note}</div>`;
+        } else {
+            let times = '';
+            if (t.drive) times += `<div class="tc-row">🚗 <span class="tc-val">${t.drive}</span> from ${t.driveFrom}</div>`;
+            if (t.pt)    times += `<div class="tc-row">🚌 <span class="tc-val">${t.pt}</span> PT from W12</div>`;
+            const noteHtml = t.note ? `<div class="tc-note">${t.note}</div>` : '';
+            card.innerHTML = `
+                <div class="tc-head">
+                    <div class="tc-ltr">${t.l}</div>
+                    <div class="tc-meta"><div class="tc-venue">${t.venue}</div><div class="tc-pc">${t.pc}</div></div>
+                    <div class="tc-who">${whoLabel}</div>
+                </div>
+                <div class="tc-times">${times}</div>${noteHtml}`;
+        }
+        grid.appendChild(card);
+    });
+}
+
+function renderAlpha5Map() {
+    const map = L.map('alpha5-map').setView([52.4, -1.6], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors', maxZoom: 18
+    }).addTo(map);
+
+    const colours = { both: '#e65100', lisa: '#2e7d32', beth: '#1565c0' };
+
+    function letterIcon(ltr, color) {
+        return L.divIcon({
+            html: `<div style="width:28px;height:28px;border-radius:50%;background:${color};border:2.5px solid rgba(255,255,255,0.9);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">${ltr}</div>`,
+            className: '', iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -16]
+        });
+    }
+
+    // Home bases
+    [{name:'Lisa · Chepstow', lat:51.6521, lng:-2.5124},
+     {name:'Beth · Cheltenham', lat:51.8958, lng:-2.0833},
+     {name:'Beth · W12 London', lat:51.507, lng:-0.226}].forEach(h => {
+        L.circleMarker([h.lat, h.lng], {radius:7, fillColor:'#555', color:'#fff', weight:2.5, fillOpacity:0.9})
+         .bindTooltip(h.name).addTo(map);
+    });
+
+    // Target venues
+    TRAVEL.forEach(t => {
+        if (!t.lat) return;
+        const color = colours[t.who];
+        let pop = `<strong>${t.l} — ${t.venue}</strong><br><span style="color:#666">${t.pc}</span>`;
+        if (t.drive) pop += `<br>🚗 ${t.drive} from ${t.driveFrom}`;
+        if (t.pt)    pop += `<br>🚌 ${t.pt} PT from W12`;
+        if (t.note)  pop += `<br><em style="color:#888">${t.note}</em>`;
+        L.marker([t.lat, t.lng], {icon: letterIcon(t.l, color)}).bindPopup(pop).addTo(map);
     });
 }
 
