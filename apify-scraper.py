@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Parkrun scraper using Playwright with stealth mode to bypass AWS WAF."""
+"""Parkrun scraper: uses Apify proxy to bypass AWS WAF, then calls AJAX endpoint."""
 import sys
 import json
+import os
+import requests
 import traceback
 from datetime import datetime
 
@@ -10,12 +12,22 @@ ATHLETES = {
     '2475659': {'name': 'Beth', 'location': 'Cheltenham'}
 }
 
+PARKRUN_API = 'https://www.parkrun.org.uk/results/athleteresultshistory/'
+
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/javascript, */*; q=0.01',
+    'Accept-Language': 'en-GB,en;q=0.9',
+    'Referer': 'https://www.parkrun.org.uk/',
+    'X-Requested-With': 'XMLHttpRequest',
+}
+
 LOG = []
 
 
 def log(msg):
     print(msg)
-    LOG.append(msg)
+    LOG.append(str(msg))
 
 
 def save_debug(extra=None):
@@ -26,115 +38,68 @@ def save_debug(extra=None):
         json.dump(debug, f, indent=2, default=str)
 
 
-def fetch_athlete_runs(playwright, athlete_id):
+def make_session(apify_token):
+    """Create a requests session routed through Apify proxy."""
+    session = requests.Session()
+    if apify_token:
+        # Apify proxy: auto mode picks best proxy type for the target URL
+        proxy_url = f'http://auto:{apify_token}@proxy.apify.com:8000'
+        session.proxies = {'http': proxy_url, 'https': proxy_url}
+        log("[*] Using Apify proxy to bypass WAF")
+    else:
+        log("[!] No APIFY_TOKEN — direct requests (may hit WAF)")
+    session.headers.update(HEADERS)
+    return session
+
+
+def fetch_athlete_runs(session, athlete_id):
     athlete_info = ATHLETES[athlete_id]
     name = athlete_info['name']
     log(f"\n[*] Fetching {name} ({athlete_id})...")
-
-    browser = playwright.chromium.launch(
-        headless=True,
-        args=[
-            '--no-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-setuid-sandbox',
-            '--disable-blink-features=AutomationControlled',
-            '--disable-infobars',
-            '--window-size=1920,1080',
-        ]
-    )
-
-    context = browser.new_context(
-        user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        viewport={'width': 1920, 'height': 1080},
-        extra_http_headers={'Accept-Language': 'en-GB,en;q=0.9'}
-    )
-
-    # Apply stealth patches to hide automation fingerprints
-    try:
-        from playwright_stealth import stealth_sync
-        page = context.new_page()
-        stealth_sync(page)
-        log("[+] playwright-stealth applied")
-    except ImportError:
-        log("[!] playwright-stealth not installed, proceeding without it")
-        page = context.new_page()
-
-    # Override navigator.webdriver manually
-    page.add_init_script("""
-        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-        Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-        Object.defineProperty(navigator, 'languages', {get: () => ['en-GB', 'en']});
-        window.chrome = {runtime: {}};
-    """)
-
-    log(f"[*] Visiting parkrun homepage to pass WAF...")
-    try:
-        response = page.goto(
-            'https://www.parkrun.org.uk/',
-            wait_until='domcontentloaded',
-            timeout=45000
-        )
-        log(f"[+] Homepage: HTTP {response.status if response else 'unknown'}")
-        page.wait_for_timeout(5000)  # Allow WAF JS challenge to complete
-        title = page.title()
-        log(f"[+] Page title: {title}")
-    except Exception as e:
-        log(f"[-] Homepage load error: {e}")
-        browser.close()
-        return None
-
-    # Grab cookies after WAF challenge
-    cookies = context.cookies()
-    waf_cookies = [c for c in cookies if 'waf' in c['name'].lower() or 'aws' in c['name'].lower()]
-    log(f"[+] Cookies set: {len(cookies)} total, {len(waf_cookies)} WAF-related")
-    log(f"[+] Cookie names: {[c['name'] for c in cookies]}")
 
     all_results = []
     offset = 0
     batch_size = 100
 
     while True:
-        log(f"[*] API request: offset={offset}...")
+        params = {
+            'athleteNumber': athlete_id,
+            'offset': offset,
+            'nbRecords': batch_size
+        }
+
         try:
-            response = context.request.get(
-                'https://www.parkrun.org.uk/results/athleteresultshistory/',
-                params={
-                    'athleteNumber': athlete_id,
-                    'offset': offset,
-                    'nbRecords': batch_size
-                },
-                headers={
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json, text/javascript, */*; q=0.01',
-                    'Referer': 'https://www.parkrun.org.uk/',
-                }
-            )
-        except Exception as e:
-            log(f"[-] Request error: {e}")
+            r = session.get(PARKRUN_API, params=params, timeout=30)
+        except requests.RequestException as e:
+            log(f"[-] Request error at offset={offset}: {e}")
             break
 
-        log(f"[+] API HTTP {response.status}")
+        log(f"[+] HTTP {r.status_code} | Content-Type: {r.headers.get('Content-Type', '?')}")
 
-        text = response.text()
-        log(f"[+] Response (first 300 chars): {text[:300]}")
-
-        if response.status != 200:
+        if r.status_code != 200:
+            log(f"[-] Non-200. Response (first 500): {r.text[:500]}")
             break
 
         try:
-            data = json.loads(text)
+            data = r.json()
         except Exception as e:
-            log(f"[-] JSON parse error: {e}")
+            log(f"[-] JSON parse error: {e} | Response: {r.text[:500]}")
             break
+
+        log(f"[*] Top-level keys: {list(data.keys())}")
 
         results = data.get('data', {}).get('Results', [])
         log(f"[+] Got {len(results)} results at offset={offset}")
 
         if not results:
-            log(f"[*] Top-level keys: {list(data.keys())}")
             if 'data' in data:
-                log(f"[*] data sub-keys: {list(data['data'].keys()) if isinstance(data['data'], dict) else type(data['data'])}")
+                sub = data['data']
+                log(f"[*] data sub-keys: {list(sub.keys()) if isinstance(sub, dict) else type(sub)}")
             break
+
+        if offset == 0 and results:
+            log(f"[*] First result keys: {list(results[0].keys())}")
+            log(f"[*] First result: {json.dumps(results[0], indent=2, default=str)}")
 
         all_results.extend(results)
 
@@ -142,17 +107,13 @@ def fetch_athlete_runs(playwright, athlete_id):
             break
         offset += batch_size
 
-    browser.close()
-    log(f"[+] Total runs fetched: {len(all_results)}")
+    log(f"[+] Total fetched: {len(all_results)} runs")
     return all_results
 
 
 def parse_runs(raw_runs):
     if not raw_runs:
         return None
-
-    log(f"[*] First item keys: {list(raw_runs[0].keys())}")
-    log(f"[*] First item: {json.dumps(raw_runs[0], indent=2, default=str)}")
 
     runs = []
     for item in raw_runs:
@@ -209,54 +170,49 @@ def group_by_alphabet(runs):
 
 
 def main():
-    from playwright.sync_api import sync_playwright
+    log("=" * 70)
+    log("PARKRUN DATA SCRAPER - Apify Proxy + Direct AJAX")
+    log("=" * 70)
 
-    log("=" * 70)
-    log("PARKRUN DATA SCRAPER - Playwright + Stealth")
-    log("=" * 70)
+    apify_token = os.environ.get('APIFY_TOKEN')
+    session = make_session(apify_token)
 
     all_data = {}
 
-    try:
-        with sync_playwright() as playwright:
-            for athlete_id, athlete_info in ATHLETES.items():
-                try:
-                    raw_runs = fetch_athlete_runs(playwright, athlete_id)
-                except Exception as e:
-                    log(f"[-] Error fetching {athlete_info['name']}: {e}")
-                    log(traceback.format_exc())
-                    continue
+    for athlete_id, athlete_info in ATHLETES.items():
+        try:
+            raw_runs = fetch_athlete_runs(session, athlete_id)
+        except Exception as e:
+            log(f"[-] Error fetching {athlete_info['name']}: {e}")
+            log(traceback.format_exc())
+            continue
 
-                if not raw_runs:
-                    log(f"[!] No runs fetched for {athlete_info['name']}")
-                    continue
+        if not raw_runs:
+            log(f"[!] No runs fetched for {athlete_info['name']}")
+            continue
 
-                runs = parse_runs(raw_runs)
-                if not runs:
-                    log(f"[!] No valid runs parsed for {athlete_info['name']}")
-                    continue
+        runs = parse_runs(raw_runs)
+        if not runs:
+            log(f"[!] No valid runs parsed for {athlete_info['name']}")
+            continue
 
-                alphabet_status, alphabet_map, letters_data = group_by_alphabet(runs)
+        alphabet_status, alphabet_map, letters_data = group_by_alphabet(runs)
 
-                all_data[athlete_id] = {
-                    'name': athlete_info['name'],
-                    'athlete_id': athlete_id,
-                    'location': athlete_info['location'],
-                    'total_runs': len(runs),
-                    'alphabet_status': alphabet_status,
-                    'runs_per_letter': {l: len(r) for l, r in letters_data.items()},
-                    'last_updated': datetime.now().isoformat()
-                }
+        all_data[athlete_id] = {
+            'name': athlete_info['name'],
+            'athlete_id': athlete_id,
+            'location': athlete_info['location'],
+            'total_runs': len(runs),
+            'alphabet_status': alphabet_status,
+            'runs_per_letter': {l: len(r) for l, r in letters_data.items()},
+            'last_updated': datetime.now().isoformat()
+        }
 
-                log(f"\n[+] {athlete_info['name']} Summary:")
-                for alph_key, alph_data in alphabet_status.items():
-                    alph_num = alph_key.split('_')[1]
-                    letters_str = ', '.join(alph_data['letters'][:5]) + ('...' if len(alph_data['letters']) > 5 else '')
-                    log(f"    Alphabet {alph_num}: {alph_data['completed']}/26 ({letters_str})")
-
-    except Exception as e:
-        log(f"[-] Fatal error: {e}")
-        log(traceback.format_exc())
+        log(f"\n[+] {athlete_info['name']} Summary:")
+        for alph_key, alph_data in alphabet_status.items():
+            alph_num = alph_key.split('_')[1]
+            letters_str = ', '.join(alph_data['letters'][:5]) + ('...' if len(alph_data['letters']) > 5 else '')
+            log(f"    Alphabet {alph_num}: {alph_data['completed']}/26 ({letters_str})")
 
     save_debug()
 
@@ -266,7 +222,7 @@ def main():
         log(f"\n[+] Saved to parkrun-data.json")
         sys.exit(0)
     else:
-        log(f"\n[!] No data collected — see debug-scraper.json")
+        log(f"\n[!] No data collected")
         sys.exit(1)
 
 
