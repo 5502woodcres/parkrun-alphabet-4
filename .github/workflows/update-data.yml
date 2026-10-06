@@ -44,40 +44,69 @@ jobs:
           echo "=== Run ended: $(date -u) ===" >> debug-run.txt
           cat debug-run.txt
 
-      - name: Commit debug log (always)
+      - name: Upload debug log via API
         if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "Parkrun Data Bot"
-          cp debug-run.txt /tmp/debug-run-new.txt 2>/dev/null || true
-          cp debug-scraper.json /tmp/debug-new.json 2>/dev/null || true
-          git pull --rebase origin main || true
-          cp /tmp/debug-run-new.txt debug-run.txt 2>/dev/null || true
-          cp /tmp/debug-new.json debug-scraper.json 2>/dev/null || true
-          git add debug-run.txt debug-scraper.json || true
-          git diff --staged --quiet || git commit -m "debug: run log $(date -u +'%H:%M UTC')"
-          git push origin HEAD:main || true
+          if [ -f debug-run.txt ]; then
+            echo "debug-run.txt exists, uploading..."
+            CONTENT=$(base64 -w0 debug-run.txt)
+            SHA=$(gh api repos/${{ github.repository }}/contents/debug-run.txt --jq '.sha' 2>/dev/null || echo "")
+            if [ -n "$SHA" ]; then
+              gh api repos/${{ github.repository }}/contents/debug-run.txt -X PUT \
+                -f message="debug: run log $(date -u +'%H:%M UTC')" \
+                -f content="$CONTENT" \
+                -f sha="$SHA" && echo "Updated existing file"
+            else
+              gh api repos/${{ github.repository }}/contents/debug-run.txt -X PUT \
+                -f message="debug: run log $(date -u +'%H:%M UTC')" \
+                -f content="$CONTENT" && echo "Created new file"
+            fi
+          else
+            echo "ERROR: debug-run.txt not found in $(pwd)"
+            ls -la
+          fi
 
       - name: Check if data changed
         id: changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ ! -f parkrun-data.json ]; then
             echo "changed=false" >> $GITHUB_OUTPUT
-          elif git diff --quiet parkrun-data.json; then
-            echo "changed=false" >> $GITHUB_OUTPUT
           else
-            echo "changed=true" >> $GITHUB_OUTPUT
+            # Compare local file with remote version
+            REMOTE_SHA=$(gh api repos/${{ github.repository }}/contents/parkrun-data.json --jq '.sha' 2>/dev/null || echo "")
+            if [ -z "$REMOTE_SHA" ]; then
+              echo "changed=true" >> $GITHUB_OUTPUT
+            else
+              LOCAL_SHA=$(git hash-object parkrun-data.json)
+              if [ "$LOCAL_SHA" = "$REMOTE_SHA" ]; then
+                echo "changed=false" >> $GITHUB_OUTPUT
+              else
+                echo "changed=true" >> $GITHUB_OUTPUT
+              fi
+            fi
           fi
 
       - name: Commit and push data
         if: steps.changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "Parkrun Data Bot"
-          git pull --rebase origin main || true
-          git add parkrun-data.json
-          git commit -m "chore: auto-update parkrun data - $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-          git push origin HEAD:main
+          CONTENT=$(base64 -w0 parkrun-data.json)
+          SHA=$(gh api repos/${{ github.repository }}/contents/parkrun-data.json --jq '.sha' 2>/dev/null || echo "")
+          if [ -n "$SHA" ]; then
+            gh api repos/${{ github.repository }}/contents/parkrun-data.json -X PUT \
+              -f message="chore: auto-update parkrun data - $(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
+              -f content="$CONTENT" \
+              -f sha="$SHA"
+          else
+            gh api repos/${{ github.repository }}/contents/parkrun-data.json -X PUT \
+              -f message="chore: auto-update parkrun data - $(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
+              -f content="$CONTENT"
+          fi
 
       - name: No changes
         if: steps.changes.outputs.changed == 'false'
