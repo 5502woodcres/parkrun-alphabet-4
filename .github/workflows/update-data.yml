@@ -32,7 +32,10 @@ jobs:
       - name: Fetch parkrun data
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-        run: python apify-scraper.py || true
+        run: |
+          python apify-scraper.py 2>&1 | tee debug-stdout.txt || true
+          echo "--- ls after script ---" >> debug-stdout.txt
+          ls -la debug-scraper.json debug-stdout.txt 2>&1 >> debug-stdout.txt
 
       - name: Commit debug log (always)
         if: always()
@@ -40,9 +43,11 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "Parkrun Data Bot"
           cp debug-scraper.json /tmp/debug-new.json 2>/dev/null || true
+          cp debug-stdout.txt /tmp/stdout-new.txt 2>/dev/null || true
           git pull --rebase origin main || true
           cp /tmp/debug-new.json debug-scraper.json 2>/dev/null || true
-          git add debug-scraper.json || true
+          cp /tmp/stdout-new.txt debug-stdout.txt 2>/dev/null || true
+          git add debug-scraper.json debug-stdout.txt || true
           git diff --staged --quiet || git commit -m "debug: scraper log $(date -u +'%H:%M UTC')"
           git push origin HEAD:main || true
 
