@@ -33,14 +33,14 @@ jobs:
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
         run: |
-          {
-            echo "=== Run started: $(date -u) ==="
-            echo "APIFY_TOKEN length: ${#APIFY_TOKEN}"
-            echo "--- apify-scraper.py output ---"
-            python apify-scraper.py 2>&1 || true
-            echo "--- end ---"
-            echo "parkrun-data.json: $(ls parkrun-data.json 2>/dev/null && echo YES || echo NO)"
-          } | tee debug-run.txt
+          date -u > debug-run.txt
+          echo "APIFY_TOKEN length: ${#APIFY_TOKEN}" >> debug-run.txt
+          rm -f parkrun-data.json
+          echo "--- script output ---" >> debug-run.txt
+          python apify-scraper.py >> debug-run.txt 2>&1 || echo "script exited non-zero" >> debug-run.txt
+          echo "parkrun-data.json: $(ls parkrun-data.json 2>/dev/null && echo YES || echo NO)" >> debug-run.txt
+          echo "done $(date -u)" >> debug-run.txt
+          cat debug-run.txt
 
       - name: Publish debug log
         if: always()
@@ -49,29 +49,36 @@ jobs:
         run: |
           echo "## Debug log" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          cat debug-run.txt >> $GITHUB_STEP_SUMMARY
+          cat debug-run.txt >> $GITHUB_STEP_SUMMARY || echo "(debug-run.txt missing)" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
 
-          # Upload via curl (avoids any Python/requests issues)
+          if [ ! -f debug-run.txt ]; then
+            echo "WARNING: debug-run.txt not found" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
           CONTENT=$(base64 -w 0 debug-run.txt)
-          SHA=$(curl -sf -H "Authorization: token $GITHUB_TOKEN" \
+          SHA=$(curl -sf \
+               -H "Authorization: token $GITHUB_TOKEN" \
                -H "Accept: application/vnd.github+json" \
                "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/debug-run.txt" \
-               | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || true)
+               | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || echo "")
 
-          PAYLOAD="{\"message\":\"debug: run log $(date -u +%Y-%m-%dT%H:%M)\",\"content\":\"$CONTENT\""
-          [ -n "$SHA" ] && PAYLOAD="$PAYLOAD,\"sha\":\"$SHA\""
-          PAYLOAD="$PAYLOAD}"
+          if [ -n "$SHA" ]; then
+            PAYLOAD=$(printf '{"message":"debug: run log","content":"%s","sha":"%s"}' "$CONTENT" "$SHA")
+          else
+            PAYLOAD=$(printf '{"message":"debug: run log","content":"%s"}' "$CONTENT")
+          fi
 
-          HTTP=$(curl -sf -X PUT \
+          HTTP=$(curl -s -o /tmp/resp.json -w "%{http_code}" -X PUT \
                -H "Authorization: token $GITHUB_TOKEN" \
                -H "Accept: application/vnd.github+json" \
                -H "Content-Type: application/json" \
                "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/debug-run.txt" \
-               -d "$PAYLOAD" \
-               -w "%{http_code}" -o /tmp/upload_resp.txt 2>&1)
-          echo "Upload HTTP status: $HTTP"
-          [ "$HTTP" = "200" ] || [ "$HTTP" = "201" ] && echo "Upload OK" || { echo "Upload failed:"; cat /tmp/upload_resp.txt; }
+               -d "$PAYLOAD")
+          echo "Upload HTTP: $HTTP" >> $GITHUB_STEP_SUMMARY
+          cat /tmp/resp.json | python3 -c "import json,sys; d=json.load(sys.stdin); print('commit:', d.get('commit',{}).get('sha','?')[:8])" 2>/dev/null || true
 
       - name: Check for data and upload
         env:
@@ -81,6 +88,6 @@ jobs:
             echo "Data generated - uploading"
             python gh-upload.py parkrun-data.json parkrun-data.json "chore: auto-update parkrun data - {ts}"
           else
-            echo "No data generated - see debug log above or debug-run.txt in repo"
+            echo "No data generated - see debug-run.txt in repo"
             exit 1
           fi
