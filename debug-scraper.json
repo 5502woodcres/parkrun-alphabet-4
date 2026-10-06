@@ -1,0 +1,31 @@
+{
+  "log": [
+    "======================================================================",
+    "PARKRUN DATA SCRAPER - Playwright + Stealth",
+    "======================================================================",
+    "\n[*] Fetching Lisa (3934942)...",
+    "[!] playwright-stealth not installed, proceeding without it",
+    "[*] Visiting parkrun homepage to pass WAF...",
+    "[+] Homepage: HTTP 405",
+    "[+] Page title: Human Verification",
+    "[+] Cookies set: 1 total, 1 WAF-related",
+    "[+] Cookie names: ['aws-waf-token']",
+    "[*] API request: offset=0...",
+    "[+] API HTTP 405",
+    "[+] Response (first 300 chars): <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Human Verification</title>\n    <style>\n        body {\n            font-family: \"Arial\";\n        }\n    </style>\n    <script type=\"text/javascript\">\n  ",
+    "[+] Total runs fetched: 0",
+    "[!] No runs fetched for Lisa",
+    "\n[*] Fetching Beth (2475659)...",
+    "[!] playwright-stealth not installed, proceeding without it",
+    "[*] Visiting parkrun homepage to pass WAF...",
+    "[+] Homepage: HTTP 405",
+    "[+] Page title: Human Verification",
+    "[+] Cookies set: 1 total, 1 WAF-related",
+    "[+] Cookie names: ['aws-waf-token']",
+    "[*] API request: offset=0...",
+    "[+] API HTTP 405",
+    "[+] Response (first 300 chars): <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Human Verification</title>\n    <style>\n        body {\n            font-family: \"Arial\";\n        }\n    </style>\n    <script type=\"text/javascript\">\n  ",
+    "[+] Total runs fetched: 0",
+    "[!] No runs fetched for Beth"
+  ]
+}
