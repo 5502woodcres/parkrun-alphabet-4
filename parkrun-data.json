@@ -267,7 +267,205 @@
       "C": 13,
       "E": 4
     },
-    "last_updated": "2026-10-06T20:12:32.323174"
+    "courses_per_letter": {
+      "T": [
+        "Tetbury Goods Shed",
+        "Tewkesbury",
+        "The Old Showfield",
+        "Thornbury",
+        "Thoulstone",
+        "Three Brooks",
+        "Time",
+        "Trelai Park",
+        "Tremorfa"
+      ],
+      "A": [
+        "Aberbeeg",
+        "Aberdare",
+        "Abingdon",
+        "Age Grading",
+        "Andover",
+        "Arrow Valley"
+      ],
+      "O": [
+        "Oaklands",
+        "Old Deer Park",
+        "Ormeau",
+        "Overall Position",
+        "Oxford"
+      ],
+      "Y": [
+        "Y Promen\u00e2d",
+        "Y Promen\u00e2d, Abermaw",
+        "Y Promen\u00e2d, Llandrillo-yn-Rhos",
+        "York",
+        "York Community Woodland"
+      ],
+      "F": [
+        "Fire Service College",
+        "Five Arches",
+        "Fordingbridge Recreation Ground",
+        "Forest of Dean",
+        "Frogmary Green Farm"
+      ],
+      "V": [
+        "Vale Park, Burslem",
+        "Valentines",
+        "Veterans Park",
+        "Victoria Embankment",
+        "Victoria Park, Newbury"
+      ],
+      "S": [
+        "Sandwell Valley",
+        "Seven Fields",
+        "Severn Bridge",
+        "Severn Valley Country",
+        "Sharpham Road Playing Fields",
+        "Shepton Mallet",
+        "Somerdale Pavilion",
+        "Southwick Country Park",
+        "St Matthew\u2019s Field",
+        "Stonehouse",
+        "Stratford Park, Stroud"
+      ],
+      "Z": [
+        "Zalew \u0141\u0119g",
+        "Zegerplas",
+        "Zielony Jar",
+        "Zuiderpark, Hoogeveen"
+      ],
+      "P": [
+        "Penallta",
+        "Perry Hall",
+        "Perton Playing Fields",
+        "Pomphrey Hill",
+        "Pont y Bala",
+        "Pontypool",
+        "Pontypridd",
+        "Prospect"
+      ],
+      "I": [
+        "Inis Me\u00e1in",
+        "Irchester Country",
+        "Isabel Trail",
+        "Itchen Valley Country"
+      ],
+      "J": [
+        "Jersey",
+        "Jersey Farm",
+        "Jubilee",
+        "Jubilee, Bedford"
+      ],
+      "D": [
+        "Daventry",
+        "Didcot",
+        "Dinton Pastures",
+        "Dudley"
+      ],
+      "G": [
+        "Gloucester City",
+        "Gloucester North",
+        "Grangemoor",
+        "Green Park",
+        "Greenham Common, Newbury",
+        "Grove Fields"
+      ],
+      "L": [
+        "Leamington",
+        "Llanfoist Crossing",
+        "Llanishen Park",
+        "Lydiard",
+        "Lydney"
+      ],
+      "U": [
+        "University Parks",
+        "University of Northampton",
+        "University of Stirling",
+        "Upton Court"
+      ],
+      "B": [
+        "Banbury",
+        "Bath Skyline",
+        "Berkeley Green",
+        "Bicester",
+        "Blaise Castle",
+        "Brickfields Park",
+        "Brunswick Park",
+        "Bryn Bach",
+        "Burnham and Highbridge"
+      ],
+      "N": [
+        "Netley Abbey",
+        "Newent",
+        "Newport",
+        "Northampton"
+      ],
+      "R": [
+        "Riverfront",
+        "Riverside Walk",
+        "Rogiet",
+        "Ross-on-Wye"
+      ],
+      "Q": [
+        "Quakers Walk",
+        "Queen Elizabeth",
+        "Queenswood Country Park",
+        "Queen\u2019s, Glasgow"
+      ],
+      "H": [
+        "Hanley",
+        "Harcourt Hill",
+        "Hereford",
+        "Highbury Fields",
+        "Horspath"
+      ],
+      "M": [
+        "Mallards Pike",
+        "Marine Parade",
+        "Marlborough Common",
+        "Melksham",
+        "Merthyr",
+        "Mole Valley",
+        "Mortimer Forest"
+      ],
+      "K": [
+        "Kilkenny Lane Country",
+        "Killerton",
+        "King George V Playing Field",
+        "Kingsway"
+      ],
+      "W": [
+        "Walsall Arboretum",
+        "Warwick Racecourse",
+        "Wolford Wood",
+        "Worcester",
+        "Worcester Pitchcroft",
+        "Wotton",
+        "Wyre Forest"
+      ],
+      "C": [
+        "Cannon Hill",
+        "Cardiff",
+        "Chasewater",
+        "Cheltenham",
+        "Chippenham",
+        "Chippenham Playing Fields, Monmouth",
+        "Chipping Norton School",
+        "Chipping Sodbury",
+        "Cirencester",
+        "Clevedon Salthouse Fields",
+        "Coed Cefn-pwll-du",
+        "Cosmeston Lakes",
+        "Cwmbran"
+      ],
+      "E": [
+        "East Park",
+        "Eastville",
+        "Edgbaston Reservoir",
+        "Evesham"
+      ]
+    },
+    "last_updated": "2026-10-06T20:15:43.489949"
   },
   "2475659": {
     "name": "Beth",
@@ -539,6 +737,205 @@
       "E": 4,
       "M": 6
     },
-    "last_updated": "2026-10-06T20:13:14.759743"
+    "courses_per_letter": {
+      "T": [
+        "Tetbury Goods Shed",
+        "Tewkesbury",
+        "Thames Path, Woolwich",
+        "Thornbury",
+        "Thoulstone",
+        "Three Brooks",
+        "Time",
+        "Tremorfa"
+      ],
+      "A": [
+        "Aberbeeg",
+        "Abingdon",
+        "Age Grading",
+        "Arrow Valley",
+        "Ashton Court"
+      ],
+      "O": [
+        "Oaklands",
+        "Old Deer Park",
+        "Ormeau",
+        "Overall Position",
+        "Oxford"
+      ],
+      "Y": [
+        "Y Promen\u00e2d",
+        "Y Promen\u00e2d, Abermaw",
+        "Y Promen\u00e2d, Llandrillo-yn-Rhos",
+        "York",
+        "York Community Woodland"
+      ],
+      "D": [
+        "Danehy Park",
+        "Didcot",
+        "Dinton Pastures",
+        "Dudley",
+        "Durham"
+      ],
+      "S": [
+        "Sandwell Valley",
+        "Seven Fields",
+        "Severn Bridge",
+        "Severn Valley Country",
+        "Sharpham Road Playing Fields",
+        "Somerdale Pavilion",
+        "Southwick Country Park",
+        "St Matthew\u2019s Field",
+        "Stonehouse",
+        "Stratford Park, Stroud",
+        "Stratford-upon-Avon"
+      ],
+      "Z": [
+        "Zalew \u0141\u0119g",
+        "Zegerplas",
+        "Zielony Jar",
+        "Zuiderpark, Hoogeveen"
+      ],
+      "I": [
+        "Inis Me\u00e1in",
+        "Irchester Country",
+        "Isabel Trail",
+        "Itchen Valley Country"
+      ],
+      "J": [
+        "Jersey",
+        "Jersey Farm",
+        "Jubilee",
+        "Jubilee, Bedford"
+      ],
+      "G": [
+        "Gloucester City",
+        "Gloucester North",
+        "Grangemoor",
+        "Green Park",
+        "Greenham Common, Newbury",
+        "Greenwich Peninsula",
+        "Grove Fields"
+      ],
+      "L": [
+        "Leamington",
+        "Llanfoist Crossing",
+        "Llanishen Park",
+        "Lydiard",
+        "Lydney"
+      ],
+      "U": [
+        "University Parks",
+        "University of Northampton",
+        "University of Stirling",
+        "Upton Court"
+      ],
+      "V": [
+        "Valentines",
+        "Veterans Park",
+        "Victoria Dock",
+        "Victoria Embankment",
+        "Victoria Park, Newbury"
+      ],
+      "B": [
+        "Babbs Mill",
+        "Banbury",
+        "Bath Skyline",
+        "Battersea",
+        "Berkeley Green",
+        "Bicester",
+        "Blaise Castle",
+        "Brickfields Park",
+        "Brunswick Park",
+        "Bryn Bach",
+        "Bushy Park"
+      ],
+      "N": [
+        "Newent",
+        "Newport",
+        "Newtown",
+        "Northampton"
+      ],
+      "P": [
+        "Perry Hall",
+        "Perton Playing Fields",
+        "Pomphrey Hill",
+        "Pontypool"
+      ],
+      "R": [
+        "Riverfront",
+        "Riverside Walk",
+        "Rogiet",
+        "Ross-on-Wye"
+      ],
+      "Q": [
+        "Quakers Walk",
+        "Queen Elizabeth",
+        "Queenswood Country Park",
+        "Queen\u2019s, Glasgow"
+      ],
+      "H": [
+        "Hampstead Heath",
+        "Hanley",
+        "Harcourt Hill",
+        "Hereford",
+        "Highbury Fields",
+        "Horspath"
+      ],
+      "W": [
+        "Walsall Arboretum",
+        "Warwick Racecourse",
+        "Wimbledon Common",
+        "Witney",
+        "Wolford Wood",
+        "Wolverhampton",
+        "Woodgate Valley Country Park",
+        "Worcester",
+        "Worcester Pitchcroft",
+        "Wormwood Scrubs",
+        "Wotton",
+        "Wyre Forest"
+      ],
+      "F": [
+        "Fire Service College",
+        "Five Arches",
+        "Forest of Dean",
+        "Fulham Palace"
+      ],
+      "K": [
+        "Kilkenny Lane Country",
+        "King George V Playing Field",
+        "Kingston",
+        "Kingsway"
+      ],
+      "C": [
+        "Cannon Hill",
+        "Cardiff",
+        "Chasewater",
+        "Cheltenham",
+        "Chippenham",
+        "Chippenham Playing Fields, Monmouth",
+        "Chipping Norton School",
+        "Chipping Sodbury",
+        "Cirencester",
+        "Clevedon Salthouse Fields",
+        "Coed Cefn-pwll-du",
+        "Cosmeston Lakes"
+      ],
+      "E": [
+        "Eastville",
+        "Eden Project",
+        "Edgbaston Reservoir",
+        "Evesham"
+      ],
+      "M": [
+        "Mallards Pike",
+        "Malm\u00f6 Ribersborg",
+        "Marine Parade",
+        "Marlborough Common",
+        "Melksham",
+        "Mole Valley"
+      ]
+    },
+    "last_updated": "2026-10-06T20:16:14.906243"
   }
 }
