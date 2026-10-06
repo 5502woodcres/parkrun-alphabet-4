@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Parkrun scraper using Playwright to bypass AWS WAF."""
+"""Parkrun scraper using Playwright with stealth mode to bypass AWS WAF."""
 import sys
 import json
+import traceback
 from datetime import datetime
 
 ATHLETES = {
@@ -9,13 +10,26 @@ ATHLETES = {
     '2475659': {'name': 'Beth', 'location': 'Cheltenham'}
 }
 
+LOG = []
+
+
+def log(msg):
+    print(msg)
+    LOG.append(msg)
+
+
+def save_debug(extra=None):
+    debug = {'log': LOG}
+    if extra:
+        debug.update(extra)
+    with open('debug-scraper.json', 'w') as f:
+        json.dump(debug, f, indent=2, default=str)
+
 
 def fetch_athlete_runs(playwright, athlete_id):
-    from playwright.sync_api import sync_playwright
-
     athlete_info = ATHLETES[athlete_id]
     name = athlete_info['name']
-    print(f"\n[*] Fetching {name} ({athlete_id})...")
+    log(f"\n[*] Fetching {name} ({athlete_id})...")
 
     browser = playwright.chromium.launch(
         headless=True,
@@ -24,73 +38,112 @@ def fetch_athlete_runs(playwright, athlete_id):
             '--disable-dev-shm-usage',
             '--disable-setuid-sandbox',
             '--disable-blink-features=AutomationControlled',
+            '--disable-infobars',
+            '--window-size=1920,1080',
         ]
     )
+
     context = browser.new_context(
         user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        viewport={'width': 1920, 'height': 1080},
         extra_http_headers={'Accept-Language': 'en-GB,en;q=0.9'}
     )
 
-    page = context.new_page()
+    # Apply stealth patches to hide automation fingerprints
+    try:
+        from playwright_stealth import stealth_sync
+        page = context.new_page()
+        stealth_sync(page)
+        log("[+] playwright-stealth applied")
+    except ImportError:
+        log("[!] playwright-stealth not installed, proceeding without it")
+        page = context.new_page()
 
-    # Visit parkrun homepage to pass AWS WAF challenge and get cookies
-    print(f"[*] Visiting parkrun homepage to pass WAF...")
-    page.goto('https://www.parkrun.org.uk/', wait_until='networkidle', timeout=60000)
-    print(f"[+] Homepage loaded, WAF cookie set")
+    # Override navigator.webdriver manually
+    page.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+        Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+        Object.defineProperty(navigator, 'languages', {get: () => ['en-GB', 'en']});
+        window.chrome = {runtime: {}};
+    """)
+
+    log(f"[*] Visiting parkrun homepage to pass WAF...")
+    try:
+        response = page.goto(
+            'https://www.parkrun.org.uk/',
+            wait_until='domcontentloaded',
+            timeout=45000
+        )
+        log(f"[+] Homepage: HTTP {response.status if response else 'unknown'}")
+        page.wait_for_timeout(5000)  # Allow WAF JS challenge to complete
+        title = page.title()
+        log(f"[+] Page title: {title}")
+    except Exception as e:
+        log(f"[-] Homepage load error: {e}")
+        browser.close()
+        return None
+
+    # Grab cookies after WAF challenge
+    cookies = context.cookies()
+    waf_cookies = [c for c in cookies if 'waf' in c['name'].lower() or 'aws' in c['name'].lower()]
+    log(f"[+] Cookies set: {len(cookies)} total, {len(waf_cookies)} WAF-related")
+    log(f"[+] Cookie names: {[c['name'] for c in cookies]}")
 
     all_results = []
     offset = 0
     batch_size = 100
 
     while True:
-        print(f"[*] Requesting results at offset={offset}...")
-        response = context.request.get(
-            'https://www.parkrun.org.uk/results/athleteresultshistory/',
-            params={
-                'athleteNumber': athlete_id,
-                'offset': offset,
-                'nbRecords': batch_size
-            },
-            headers={
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json, text/javascript, */*; q=0.01',
-                'Referer': 'https://www.parkrun.org.uk/',
-            }
-        )
+        log(f"[*] API request: offset={offset}...")
+        try:
+            response = context.request.get(
+                'https://www.parkrun.org.uk/results/athleteresultshistory/',
+                params={
+                    'athleteNumber': athlete_id,
+                    'offset': offset,
+                    'nbRecords': batch_size
+                },
+                headers={
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json, text/javascript, */*; q=0.01',
+                    'Referer': 'https://www.parkrun.org.uk/',
+                }
+            )
+        except Exception as e:
+            log(f"[-] Request error: {e}")
+            break
 
-        print(f"[+] HTTP {response.status}")
+        log(f"[+] API HTTP {response.status}")
+
+        text = response.text()
+        log(f"[+] Response (first 300 chars): {text[:300]}")
 
         if response.status != 200:
-            text = response.text()
-            print(f"[-] Non-200 response. First 500 chars: {text[:500]}")
             break
 
         try:
-            data = response.json()
+            data = json.loads(text)
         except Exception as e:
-            print(f"[-] JSON parse error: {e}")
-            print(f"    Response: {response.text()[:500]}")
+            log(f"[-] JSON parse error: {e}")
             break
 
         results = data.get('data', {}).get('Results', [])
-        print(f"[+] Got {len(results)} results")
+        log(f"[+] Got {len(results)} results at offset={offset}")
 
         if not results:
-            # Print top-level keys to help debug structure
-            print(f"[*] Response top-level keys: {list(data.keys())}")
+            log(f"[*] Top-level keys: {list(data.keys())}")
             if 'data' in data:
-                print(f"[*] data keys: {list(data['data'].keys())}")
+                log(f"[*] data sub-keys: {list(data['data'].keys()) if isinstance(data['data'], dict) else type(data['data'])}")
             break
 
         all_results.extend(results)
 
         if len(results) < batch_size:
             break
-
         offset += batch_size
 
     browser.close()
-    print(f"[+] Total fetched: {len(all_results)} runs")
+    log(f"[+] Total runs fetched: {len(all_results)}")
     return all_results
 
 
@@ -98,12 +151,11 @@ def parse_runs(raw_runs):
     if not raw_runs:
         return None
 
-    print(f"[*] First item keys: {list(raw_runs[0].keys())}")
-    print(f"[*] First item sample: {json.dumps(raw_runs[0], indent=2, default=str)}")
+    log(f"[*] First item keys: {list(raw_runs[0].keys())}")
+    log(f"[*] First item: {json.dumps(raw_runs[0], indent=2, default=str)}")
 
     runs = []
     for item in raw_runs:
-        # Try multiple possible field names
         date_str = (item.get('EventDate') or item.get('RunDate') or
                     item.get('date') or item.get('eventDate') or '')
         course = (item.get('EventLongName') or item.get('EventName') or
@@ -121,7 +173,7 @@ def parse_runs(raw_runs):
             'letter': letter
         })
 
-    print(f"[+] Parsed {len(runs)} valid runs")
+    log(f"[+] Parsed {len(runs)} valid runs")
     return runs if runs else None
 
 
@@ -159,56 +211,62 @@ def group_by_alphabet(runs):
 def main():
     from playwright.sync_api import sync_playwright
 
-    print("=" * 70)
-    print("PARKRUN DATA SCRAPER - Playwright Browser")
-    print("=" * 70)
+    log("=" * 70)
+    log("PARKRUN DATA SCRAPER - Playwright + Stealth")
+    log("=" * 70)
 
     all_data = {}
 
-    with sync_playwright() as playwright:
-        for athlete_id, athlete_info in ATHLETES.items():
-            try:
-                raw_runs = fetch_athlete_runs(playwright, athlete_id)
-            except Exception as e:
-                print(f"[-] Error fetching {athlete_info['name']}: {e}")
-                import traceback
-                traceback.print_exc()
-                continue
+    try:
+        with sync_playwright() as playwright:
+            for athlete_id, athlete_info in ATHLETES.items():
+                try:
+                    raw_runs = fetch_athlete_runs(playwright, athlete_id)
+                except Exception as e:
+                    log(f"[-] Error fetching {athlete_info['name']}: {e}")
+                    log(traceback.format_exc())
+                    continue
 
-            if not raw_runs:
-                print(f"[!] No runs fetched for {athlete_info['name']}")
-                continue
+                if not raw_runs:
+                    log(f"[!] No runs fetched for {athlete_info['name']}")
+                    continue
 
-            runs = parse_runs(raw_runs)
-            if not runs:
-                print(f"[!] No valid runs parsed for {athlete_info['name']}")
-                continue
+                runs = parse_runs(raw_runs)
+                if not runs:
+                    log(f"[!] No valid runs parsed for {athlete_info['name']}")
+                    continue
 
-            alphabet_status, alphabet_map, letters_data = group_by_alphabet(runs)
+                alphabet_status, alphabet_map, letters_data = group_by_alphabet(runs)
 
-            all_data[athlete_id] = {
-                'name': athlete_info['name'],
-                'athlete_id': athlete_id,
-                'location': athlete_info['location'],
-                'total_runs': len(runs),
-                'alphabet_status': alphabet_status,
-                'runs_per_letter': {l: len(r) for l, r in letters_data.items()},
-                'last_updated': datetime.now().isoformat()
-            }
+                all_data[athlete_id] = {
+                    'name': athlete_info['name'],
+                    'athlete_id': athlete_id,
+                    'location': athlete_info['location'],
+                    'total_runs': len(runs),
+                    'alphabet_status': alphabet_status,
+                    'runs_per_letter': {l: len(r) for l, r in letters_data.items()},
+                    'last_updated': datetime.now().isoformat()
+                }
 
-            print(f"\n[+] {athlete_info['name']} Summary:")
-            for alph_key, alph_data in alphabet_status.items():
-                alph_num = alph_key.split('_')[1]
-                letters_str = ', '.join(alph_data['letters'][:5]) + ('...' if len(alph_data['letters']) > 5 else '')
-                print(f"    Alphabet {alph_num}: {alph_data['completed']}/26 ({letters_str})")
+                log(f"\n[+] {athlete_info['name']} Summary:")
+                for alph_key, alph_data in alphabet_status.items():
+                    alph_num = alph_key.split('_')[1]
+                    letters_str = ', '.join(alph_data['letters'][:5]) + ('...' if len(alph_data['letters']) > 5 else '')
+                    log(f"    Alphabet {alph_num}: {alph_data['completed']}/26 ({letters_str})")
+
+    except Exception as e:
+        log(f"[-] Fatal error: {e}")
+        log(traceback.format_exc())
+
+    save_debug()
 
     if all_data:
         with open('parkrun-data.json', 'w') as f:
             json.dump(all_data, f, indent=2)
-        print(f"\n[+] Saved to parkrun-data.json")
+        log(f"\n[+] Saved to parkrun-data.json")
         sys.exit(0)
     else:
-        print(f"\n[!] No data collected")
+        log(f"\n[!] No data collected — see debug-scraper.json")
         sys.exit(1)
 
 
