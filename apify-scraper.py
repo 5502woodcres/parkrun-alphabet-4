@@ -347,33 +347,60 @@ def parse_runs(raw_runs):
     return runs if runs else None
 
 
+# The 25 letters that count toward the alphabet challenge (A-Z, X excluded)
+CHALLENGE_LETTERS = [chr(i) for i in range(65, 91) if chr(i) != 'X']
+
+
 def group_by_alphabet(runs):
+    """Return alphabet status for all achievable alphabets (at least 6 shown).
+
+    Alphabet N is complete when every challenge letter has been run at
+    least N times. X is excluded — parkrun courses starting with X are
+    practically non-existent. The alphabet target is 25 letters.
+    """
     if not runs:
         return {}, {}, {}
-    # Only A-Z letters count toward the alphabet challenge
+
+    # Bucket runs by first letter, valid challenge letters only
     letters = {}
     for run in runs:
         letter = run['letter']
-        if not letter.isalpha():
-            continue  # Skip courses starting with digits/punctuation
-        if letter not in letters:
-            letters[letter] = []
-        letters[letter].append(run)
+        if letter not in CHALLENGE_LETTERS:
+            continue
+        letters.setdefault(letter, []).append(run)
+
+    # For each letter, the Nth run (chronologically) feeds alphabet N
     alphabet_map = {}
     for letter in sorted(letters.keys()):
         for idx, run in enumerate(sorted(letters[letter], key=lambda x: x['date'])):
-            alphabet_num = idx + 1
-            if alphabet_num not in alphabet_map:
-                alphabet_map[alphabet_num] = []
-            alphabet_map[alphabet_num].append(letter)
+            n = idx + 1
+            alphabet_map.setdefault(n, []).append(letter)
+
+    # Show all complete alphabets plus the next two in progress
+    complete_through = 0
+    for n in range(1, 100):
+        done = set(alphabet_map.get(n, []))
+        if all(l in done for l in CHALLENGE_LETTERS):
+            complete_through = n
+        else:
+            break
+
+    max_show = max(complete_through + 2, 6)
+
     result = {}
-    for alphabet_num in range(1, 5):
-        done = set(alphabet_map.get(alphabet_num, []))
-        result[f'alphabet_{alphabet_num}'] = {
-            'letters': sorted(list(done)),
+    for n in range(1, max_show + 1):
+        done = set(alphabet_map.get(n, []))
+        remaining = [l for l in CHALLENGE_LETTERS if l not in done]
+        runs_needed = {l: n - len(letters.get(l, [])) for l in remaining}
+        result[f'alphabet_{n}'] = {
+            'letters': sorted(done),
             'completed': len(done),
-            'remaining': sorted([chr(i) for i in range(65, 91) if chr(i) not in done])
+            'total': len(CHALLENGE_LETTERS),
+            'remaining': sorted(remaining),
+            'runs_needed': runs_needed,        # how many more per missing letter
+            'is_complete': len(remaining) == 0,
         }
+
     return result, alphabet_map, letters
 
 
