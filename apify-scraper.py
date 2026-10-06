@@ -5,7 +5,7 @@ import sys
 from datetime import datetime
 
 APIFY_TOKEN = None
-APIFY_ACTOR_ID = 'lulzasaur~parkrun-scraper'
+APIFY_ACTOR_ID = '5lljkHZ8Jh1vf2NHc'  # Correct actor ID
 
 ATHLETES = {
     'a3934942': {'name': 'Lisa', 'location': 'Chepstow'},
@@ -15,14 +15,20 @@ ATHLETES = {
 def fetch_from_apify(athlete_id):
     print(f"\n[*] Fetching {ATHLETES[athlete_id]['name']} ({athlete_id})...")
     
-    url = f'https://api.apify.com/v2/actor-tasks/{APIFY_ACTOR_ID}/run-sync'
+    url = f'https://api.apify.com/v2/acts/{APIFY_ACTOR_ID}/run-sync'
     headers = {
         'Authorization': f'Bearer {APIFY_TOKEN}',
         'Content-Type': 'application/json'
     }
     
+    payload = {
+        'mode': 'athlete-history',
+        'athleteNumbers': [athlete_id],
+        'country': 'org.uk'
+    }
+    
     try:
-        response = requests.post(url, json={'athleteId': athlete_id}, headers=headers, timeout=60)
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
@@ -34,15 +40,16 @@ def parse_athlete_data(apify_response, athlete_id, athlete_info):
         return None
     
     try:
-        results = apify_response.get('output', {}).get('results', [])
+        results = apify_response.get('output', {}).get('athleteData', [])
         if not results:
+            print(f"[-] No results for {athlete_id}")
             return None
         
         runs = []
         for result in results:
-            date_str = result.get('eventDate') or result.get('date')
-            course = result.get('courseName') or result.get('name', '')
-            time_str = result.get('finishTime') or result.get('time', '')
+            date_str = result.get('date')
+            course = result.get('courseName') or result.get('course', '')
+            time_str = result.get('time', '')
             
             if not date_str or not course:
                 continue
@@ -58,7 +65,7 @@ def parse_athlete_data(apify_response, athlete_id, athlete_info):
         print(f"[+] Parsed {len(runs)} runs")
         return runs
     except Exception as e:
-        print(f"[-] Error: {e}")
+        print(f"[-] Error parsing: {e}")
         return None
 
 def group_by_alphabet(runs):
@@ -103,7 +110,7 @@ def main():
         sys.exit(1)
     
     print("="*70)
-    print("PARKRUN DATA SCRAPER - Apify Cloud")
+    print("PARKRUN DATA SCRAPER - Apify")
     print("="*70)
     
     all_data = {}
@@ -143,7 +150,7 @@ def main():
         print(f"\n[+] Saved to parkrun-data.json")
         sys.exit(0)
     else:
-        print(f"\n[!] No data")
+        print(f"\n[!] No data collected")
         sys.exit(1)
 
 if __name__ == '__main__':
