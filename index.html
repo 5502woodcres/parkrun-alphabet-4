@@ -474,20 +474,20 @@ function initMap() {
 
 // ── Travel Planner data (static research) ──
 const TRAVEL = [
-    {l:'A', who:'beth', venue:'Andover',        pc:'SP10', lat:51.221, lng:-1.505, drive:'~1h 0m',  driveFrom:'Cheltenham', pt:'~1h 30m', note:null},
-    {l:'D', who:'lisa', venue:'Dulwich',         pc:'SE21', lat:51.444, lng:-0.079, drive:'~2h 30m', driveFrom:'Chepstow',   pt:null,      note:'Greater London'},
-    {l:'E', who:'both', venue:'Eastleigh',       pc:'SO50', lat:50.968, lng:-1.374, drive:'~1h 25m', driveFrom:'Cheltenham', pt:null,      note:null},
-    {l:'F', who:'beth', venue:'Fordingbridge',   pc:'SP6',  lat:50.925, lng:-1.788, drive:'~1h 20m', driveFrom:'Cheltenham', pt:'~2h 30m', note:null},
-    {l:'I', who:'both', venue:'Ipswich',         pc:'IP2',  lat:52.051, lng:1.116,  drive:'~2h 20m', driveFrom:'Cheltenham', pt:null,      note:null},
-    {l:'J', who:'both', venue:'Jesmond Dene',    pc:'NE7',  lat:54.990, lng:-1.591, drive:'~3h 45m', driveFrom:'Cheltenham', pt:null,      note:'Only UK J venue'},
-    {l:'K', who:'both', venue:'Kingsbury Water', pc:'B78',  lat:52.560, lng:-1.699, drive:'~55m',    driveFrom:'Cheltenham', pt:null,      note:null},
-    {l:'N', who:'both', venue:'Northala Fields', pc:'UB5',  lat:51.540, lng:-0.377, drive:null,      driveFrom:null,         pt:'~30m',    note:'Greater London · PT from W12'},
-    {l:'O', who:'both', venue:'Osterley',        pc:'TW7',  lat:51.490, lng:-0.351, drive:null,      driveFrom:null,         pt:'~35m',    note:'Greater London · PT from W12'},
-    {l:'P', who:'beth', venue:'Prospect',        pc:'RG30', lat:51.449, lng:-1.007, drive:'~1h 5m',  driveFrom:'Cheltenham', pt:'~1h 0m',  note:'Reading'},
-    {l:'Q', who:'both', venue:'Queensway',       pc:'NN8',  lat:52.305, lng:-0.724, drive:'~1h 10m', driveFrom:'Cheltenham', pt:null,      note:'Wellingborough'},
-    {l:'R', who:'both', venue:'Rugby',           pc:'CV21', lat:52.370, lng:-1.237, drive:'~55m',    driveFrom:'Cheltenham', pt:null,      note:null},
-    {l:'U', who:'both', venue:'Upton House',     pc:'BH17', lat:50.734, lng:-2.013, drive:'~1h 35m', driveFrom:'Cheltenham', pt:null,      note:'Poole'},
-    {l:'Z', who:'both', venue:null,              pc:null,   lat:null,   lng:null,   drive:null,      driveFrom:null,         pt:null,      note:'Nearest venues are all abroad — plan a trip!'},
+    {l:'A', who:'beth', venue:'Aylesbury',           pc:'HP19', lat:51.826, lng:-0.848, drive:'1h 05m', driveFrom:'Cheltenham', pt:'1h 45m', note:'Quarrendon'},
+    {l:'D', who:'lisa', venue:'Darley',              pc:'DE22', lat:52.941, lng:-1.487, drive:'2h 00m', driveFrom:'Chepstow',   pt:null,     note:'Darley Abbey, Derby'},
+    {l:'E', who:'both', venue:'Eastleigh',           pc:'SO50', lat:50.968, lng:-1.374, drive:'1h 25m', driveFrom:'Cheltenham', pt:null,     note:null},
+    {l:'F', who:'beth', venue:'Frogmary Green Farm', pc:'TA13', lat:50.963, lng:-2.819, drive:'1h 20m', driveFrom:'Cheltenham', pt:'2h 45m', note:'South Somerset'},
+    {l:'I', who:'both', venue:'Ifield Mill Pond',    pc:'RH11', lat:51.107, lng:-0.213, drive:'1h 55m', driveFrom:'Cheltenham', pt:null,     note:'Crawley'},
+    {l:'J', who:'both', venue:'Jubilee Bedford',     pc:'MK42', lat:52.128, lng:-0.467, drive:'1h 30m', driveFrom:'Cheltenham', pt:null,     note:'Bedford'},
+    {l:'K', who:'both', venue:'Kingsbury Water',     pc:'B78',  lat:52.560, lng:-1.699, drive:'55m',    driveFrom:'Cheltenham', pt:null,     note:null},
+    {l:'N', who:'both', venue:'Northala Fields',     pc:'UB5',  lat:51.540, lng:-0.377, drive:null,     driveFrom:null,         pt:'35m',    note:'Greater London · PT from W12'},
+    {l:'O', who:'both', venue:'Osterley',            pc:'TW7',  lat:51.490, lng:-0.351, drive:null,     driveFrom:null,         pt:'35m',    note:'Greater London · PT from W12'},
+    {l:'P', who:'beth', venue:'Prospect',            pc:'RG30', lat:51.449, lng:-1.007, drive:'1h 05m', driveFrom:'Cheltenham', pt:'1h 05m', note:'Reading'},
+    {l:'Q', who:'both', venue:'Queensway',           pc:'NN8',  lat:52.305, lng:-0.724, drive:'1h 20m', driveFrom:'Cheltenham', pt:null,     note:'Wellingborough'},
+    {l:'R', who:'both', venue:'Rugby',               pc:'CV21', lat:52.370, lng:-1.237, drive:'50m',    driveFrom:'Cheltenham', pt:null,     note:null},
+    {l:'U', who:'both', venue:'Upton House',         pc:'BH17', lat:50.734, lng:-2.013, drive:'1h 40m', driveFrom:'Cheltenham', pt:null,     note:'Poole'},
+    {l:'Z', who:'both', venue:null,                  pc:null,   lat:null,   lng:null,   drive:null,     driveFrom:null,         pt:null,     note:'Nearest venues are all abroad — plan a trip!'},
 ];
 
 function renderTravel() {
