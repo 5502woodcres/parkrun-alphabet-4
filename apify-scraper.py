@@ -72,17 +72,25 @@ def save_debug(extra=None):
         json.dump(debug, f, indent=2, default=str)
 
 
+def _auth_headers(token):
+    return {'Authorization': f'Bearer {token}'}
+
+
 def api_get(path, token):
-    r = requests.get(f'{APIFY_BASE}{path}', params={'token': token}, timeout=30)
+    r = requests.get(f'{APIFY_BASE}{path}', headers=_auth_headers(token), timeout=30)
     r.raise_for_status()
     return r.json()
 
 
 def api_post(path, token, data=None, extra_params=None):
-    params = {'token': token}
-    if extra_params:
-        params.update(extra_params)
-    r = requests.post(f'{APIFY_BASE}{path}', params=params, json=data, timeout=60)
+    params = extra_params or {}
+    r = requests.post(
+        f'{APIFY_BASE}{path}',
+        params=params,
+        headers=_auth_headers(token),
+        json=data,
+        timeout=60
+    )
     if not r.ok:
         log(f"[-] API error {r.status_code}: {r.text[:300]}")
     r.raise_for_status()
@@ -175,7 +183,8 @@ def run_actor(token, actor_id):
     log(f"[*] Fetching output from KV store {kv_id}...")
     r = requests.get(
         f'{APIFY_BASE}/key-value-stores/{kv_id}/records/OUTPUT',
-        params={'token': token}, timeout=30
+        headers=_auth_headers(token),
+        timeout=30
     )
     r.raise_for_status()
     return r.json()

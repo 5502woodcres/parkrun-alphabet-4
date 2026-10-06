@@ -56,7 +56,7 @@ jobs:
             git add parkrun-data.json
             git diff --cached --quiet || git commit -m "chore: auto-update parkrun data [skip ci]"
           fi
-          git push || echo "Push failed (no changes or permission error)"
+          git push
 
       - name: Fail if no data
         run: |
