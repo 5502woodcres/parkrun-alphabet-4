@@ -1,83 +1,95 @@
 #!/usr/bin/env python3
 import sys
 import json
+import requests
 from datetime import datetime
-
-APIFY_ACTOR_ID = '5lljkHZ8Jh1vf2NHc'
 
 ATHLETES = {
     '3934942': {'name': 'Lisa', 'location': 'Chepstow'},
     '2475659': {'name': 'Beth', 'location': 'Cheltenham'}
 }
 
-def fetch_from_apify(athlete_id, token):
-    from apify_client import ApifyClient
+PARKRUN_API = 'https://www.parkrun.org.uk/results/athleteresultshistory/'
 
-    client = ApifyClient(token)
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/javascript, */*; q=0.01',
+    'Accept-Language': 'en-GB,en;q=0.9',
+    'Referer': 'https://www.parkrun.org.uk/',
+    'X-Requested-With': 'XMLHttpRequest',
+}
+
+def fetch_athlete_runs(athlete_id):
     athlete_info = ATHLETES[athlete_id]
     print(f"\n[*] Fetching {athlete_info['name']} ({athlete_id})...")
 
-    payload = {
-        'mode': 'athlete-history',
-        'athleteNumbers': [athlete_id],
-        'country': 'org.uk'
-    }
+    all_runs = []
+    offset = 0
+    batch_size = 100
 
-    run = client.actor(APIFY_ACTOR_ID).call(run_input=payload)
+    while True:
+        params = {
+            'athleteNumber': athlete_id,
+            'offset': offset,
+            'nbRecords': batch_size
+        }
 
-    # Handle both dict and object return types from apify_client
-    if isinstance(run, dict):
-        status = run.get('status')
-        dataset_id = run.get('defaultDatasetId')
-    else:
-        status = getattr(run, 'status', None)
-        dataset_id = getattr(run, 'default_dataset_id', None)
+        try:
+            response = requests.get(PARKRUN_API, params=params, headers=HEADERS, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+        except requests.RequestException as e:
+            print(f"[-] Request error at offset {offset}: {e}")
+            break
+        except json.JSONDecodeError as e:
+            print(f"[-] JSON decode error at offset {offset}: {e}")
+            print(f"    Response text (first 500 chars): {response.text[:500]}")
+            break
 
-    print(f"[+] Run status: {status}")
-    print(f"[+] Dataset ID: {dataset_id}")
+        # Response structure: {"data": {"Results": [...]}}
+        results = data.get('data', {}).get('Results', [])
+        print(f"[+] Got {len(results)} runs at offset {offset}")
 
-    if not dataset_id:
-        print(f"[-] No dataset ID returned")
-        return None
+        if not results:
+            break
 
-    items = list(client.dataset(dataset_id).iterate_items())
-    print(f"[+] Got {len(items)} items")
+        all_runs.extend(results)
 
-    if items:
-        print(f"[*] Sample item keys: {list(items[0].keys())}")
-        print(f"[*] First item: {json.dumps(items[0], indent=2)}")
-    else:
-        print(f"[-] No items in dataset — athlete page may require login or ID may be incorrect")
+        if len(results) < batch_size:
+            break
 
-    return {'items': items} if items else None
+        offset += batch_size
 
-def parse_athlete_data(apify_response, athlete_id, athlete_info):
-    if not apify_response:
-        return None
-    items = apify_response.get('items', [])
-    if not items:
-        return None
+    print(f"[+] Total runs fetched: {len(all_runs)}")
+    return all_runs
 
+
+def parse_runs(raw_runs):
     runs = []
-    for item in items:
-        date_str = item.get('date')
-        # Actor returns 'event' for course name based on documented output schema
-        course = item.get('event') or item.get('courseName') or item.get('course', '')
+    for item in raw_runs:
+        # Field names from parkrun AJAX API
+        date_str = item.get('EventDate') or item.get('date', '')
+        course = item.get('EventLongName') or item.get('EventName') or item.get('event', '')
+
         if not date_str or not course:
             continue
+
+        letter = course[0].upper()
         runs.append({
             'date': date_str,
             'course': course,
-            'time': item.get('time', ''),
-            'letter': course[0].upper()
+            'time': item.get('RunTime') or item.get('time', ''),
+            'letter': letter
         })
 
-    print(f"[+] Parsed {len(runs)} runs")
-    return runs if runs else None
+    print(f"[+] Parsed {len(runs)} valid runs")
+    return runs
+
 
 def group_by_alphabet(runs):
     if not runs:
         return {}, {}, {}
+
     letters = {}
     for run in runs:
         letter = run['letter']
@@ -101,35 +113,32 @@ def group_by_alphabet(runs):
             'completed': len(done),
             'remaining': sorted([chr(i) for i in range(65, 91) if chr(i) not in done])
         }
+
     return result, alphabet_map, letters
 
-def main():
-    import os
-    token = os.environ.get('APIFY_TOKEN')
-    if not token:
-        print("[!] APIFY_TOKEN not set")
-        sys.exit(1)
 
-    print("="*70)
-    print("PARKRUN DATA SCRAPER")
-    print("="*70)
+def main():
+    print("=" * 70)
+    print("PARKRUN DATA SCRAPER - Direct API")
+    print("=" * 70)
 
     all_data = {}
+
     for athlete_id, athlete_info in ATHLETES.items():
-        try:
-            apify_response = fetch_from_apify(athlete_id, token)
-        except Exception as e:
-            print(f"[-] Error fetching {athlete_info['name']}: {e}")
-            import traceback
-            traceback.print_exc()
+        raw_runs = fetch_athlete_runs(athlete_id)
+
+        if not raw_runs:
+            print(f"[!] No runs fetched for {athlete_info['name']}")
             continue
 
-        runs = parse_athlete_data(apify_response, athlete_id, athlete_info)
+        runs = parse_runs(raw_runs)
+
         if not runs:
             print(f"[!] No runs parsed for {athlete_info['name']}")
             continue
 
         alphabet_status, alphabet_map, letters_data = group_by_alphabet(runs)
+
         all_data[athlete_id] = {
             'name': athlete_info['name'],
             'athlete_id': athlete_id,
@@ -154,6 +163,7 @@ def main():
     else:
         print(f"\n[!] No data collected")
         sys.exit(1)
+
 
 if __name__ == '__main__':
     main()

@@ -21,11 +21,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install apify-client
+          pip install requests
 
       - name: Fetch parkrun data
-        env:
-          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
         run: |
           python apify-scraper.py
 
