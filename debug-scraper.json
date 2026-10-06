@@ -3,6 +3,24 @@
     "======================================================================",
     "PARKRUN DATA SCRAPER - Apify Actor API",
     "======================================================================",
-    "[-] APIFY_TOKEN not set \u2014 aborting"
+    "[*] APIFY_TOKEN present, length=46",
+    "[+] Found existing actor: RnYQAo4TgfbLEv9xv",
+    "[!] No valid latest build found \u2014 rebuilding actor",
+    "[-] API error 403: {\n  \"error\": {\n    \"type\": \"version-already-exists\",\n    \"message\": \"Version with this number already exists\"\n  }\n}",
+    "[*] Version 0.0 already exists \u2014 updating via PUT",
+    "[+] Source version updated",
+    "[+] Source uploaded",
+    "[*] Building actor (id=ASm1YP0lecOCW5Luy)...",
+    "[*]   build status: RUNNING (10s)",
+    "[*]   build status: RUNNING (20s)",
+    "[*]   build status: RUNNING (30s)",
+    "[*]   build status: RUNNING (40s)",
+    "[*]   build status: SUCCEEDED (50s)",
+    "[+] Build succeeded",
+    "[*] Running actor RnYQAo4TgfbLEv9xv...",
+    "[*] Run ID: tQZkodyw0M1wugaUq",
+    "[*]   run status: FAILED (10s)",
+    "[-] Actor error: Run failed: FAILED",
+    "Traceback (most recent call last):\n  File \"/home/runner/work/parkrun-alphabet-4/parkrun-alphabet-4/apify-scraper.py\", line 299, in main\n    raw_output = run_actor(apify_token, actor_id)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/parkrun-alphabet-4/parkrun-alphabet-4/apify-scraper.py\", line 219, in run_actor\n    raise Exception(f\"Run failed: {status}\")\nException: Run failed: FAILED\n"
   ]
 }
