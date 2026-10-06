@@ -37,10 +37,12 @@ jobs:
           echo "Python: $(python --version 2>&1)" >> debug-run.txt
           echo "Requests check: $(python -c 'import requests; print(requests.__version__)' 2>&1)" >> debug-run.txt
           echo "APIFY_TOKEN set: $([ -n "$APIFY_TOKEN" ] && echo yes || echo NO)" >> debug-run.txt
+          # Remove stale parkrun-data.json so we only commit a freshly-generated one
+          rm -f parkrun-data.json
           echo "=== Script output ===" >> debug-run.txt
           python apify-scraper.py >> debug-run.txt 2>&1 || echo "Script exited non-zero" >> debug-run.txt
           echo "=== Files after script ===" >> debug-run.txt
-          ls -la debug-*.json debug-*.txt parkrun-data.json 2>&1 >> debug-run.txt
+          ls -la . 2>&1 >> debug-run.txt
           echo "=== Run ended: $(date -u) ===" >> debug-run.txt
           cat debug-run.txt
 
@@ -49,18 +51,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "=== Upload attempt ===" >> debug-run.txt
-          python gh-upload.py debug-run.txt debug-run.txt "debug: run log {ts}" 2>&1 | tee -a debug-run.txt | tee -a "$GITHUB_STEP_SUMMARY" || true
+          python gh-upload.py debug-run.txt debug-run.txt "debug: run log {ts}" >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
           echo "---" >> "$GITHUB_STEP_SUMMARY"
-          # Upload once more so the full output (including above) is captured
-          python gh-upload.py debug-run.txt debug-run.txt "debug: run log {ts}" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || echo "Second upload also failed - see summary for details"
+          cat debug-run.txt >> "$GITHUB_STEP_SUMMARY" || true
 
-      - name: Check if data file was generated
+      - name: Check if fresh data was generated
         id: changes
         run: |
           if [ -f parkrun-data.json ]; then
+            echo "Data file generated successfully"
             echo "changed=true" >> $GITHUB_OUTPUT
           else
+            echo "No data file - scraper likely failed"
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
 
@@ -71,6 +73,6 @@ jobs:
         run: |
           python gh-upload.py parkrun-data.json parkrun-data.json "chore: auto-update parkrun data - {ts}"
 
-      - name: No data
+      - name: No data generated
         if: steps.changes.outputs.changed == 'false'
-        run: echo "parkrun-data.json not generated - check debug-run.txt in repo"
+        run: echo "parkrun-data.json not generated - check Actions Summary for debug log"
