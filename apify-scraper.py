@@ -163,9 +163,12 @@ def main():
 
     proxy_config = None
     if use_proxy:
+        # Apify proxy: username='auto' uses best available proxies for the plan.
+        # For residential specifically use 'groups-RESIDENTIAL' (requires paid plan).
+        # Password is Apify API token (same as proxy password for personal accounts).
         proxy_config = {
             'server': 'http://proxy.apify.com:8000',
-            'username': 'groups-RESIDENTIAL',
+            'username': 'auto',
             'password': apify_token,
         }
 
