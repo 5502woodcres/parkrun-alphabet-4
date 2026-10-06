@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parkrun Alphabet 4 Challenge</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8f9fa;
+            color: #1a1a1a;
+        }
+        header {
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 30px 0;
+            margin-bottom: 30px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+        }
+        .alphabet-progress {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .alphabet-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .alphabet-card h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        .alphabet-card.complete {
+            border-color: #4caf50;
+            background: #f1f8f5;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #2196f3;
+            transition: width 0.3s;
+        }
+        .progress-text {
+            font-size: 14px;
+            color: #666;
+            margin-top: 8px;
+        }
+        .completion-date {
+            font-size: 12px;
+            color: #999;
+            margin-top: 10px;
+        }
+        .remaining-letters {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .remaining-letters h2 {
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+        .letters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .letter-tag {
+            background: #ff9800;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .recommendations {
+            margin-top: 30px;
+        }
+        .rec-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 12px;
+        }
+        .rec-letter {
+            font-weight: 700;
+            font-size: 18px;
+            color: #2196f3;
+            display: inline-block;
+            min-width: 30px;
+        }
+        .rec-course {
+            font-weight: 500;
+            margin: 5px 0;
+        }
+        .rec-distance {
+            font-size: 12px;
+            color: #999;
+        }
+        .rec-travel {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin-left: 10px;
+        }
+        .runs-per-letter {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .runs-per-letter h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .runs-grid {
+            display: grid;
+            grid-template-columns: repeat(13, 1fr);
+            gap: 6px;
+        }
+        .run-count {
+            background: #f5f5f5;
+            padding: 8px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 12px;
+        }
+        .run-count strong {
+            display: block;
+            font-size: 14px;
+        }
+        #map {
+            width: 100%;
+            height: 500px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+        }
+        .last-updated {
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>🏃 Parkrun Alphabet Challenge</h1>
+            <p class="subtitle">Tracking Lisa & Beth's 4th Alphabet Progress</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="alphabet-progress" id="alphabet-cards"></div>
+
+        <div class="remaining-letters">
+            <h2>Letters Still Needed for Alphabet 4</h2>
+            <div class="letters-grid" id="remaining-letters"></div>
+            <div class="recommendations" id="recommendations"></div>
+        </div>
+
+        <div id="map"></div>
+
+        <div class="last-updated" id="last-updated"></div>
+    </div>
+
+    <script>
+        const LOCATIONS = {
+            'chepstow': {lat: 51.6521, lng: -2.5124, name: 'Chepstow'},
+            'cheltenham': {lat: 51.8958, lng: -2.0833, name: 'Cheltenham'},
+            'london': {lat: 51.5045, lng: -0.2226, name: 'London W12'}
+        };
+
+        let allData = {};
+        let map = null;
+
+        function haversine(lat1, lng1, lat2, lng2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lng1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLng/2) * Math.sin(dLng/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        async function loadData() {
+            try {
+                const response = await fetch('parkrun-data.json');
+                allData = await response.json();
+                renderDashboard();
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.body.innerHTML += '<p>Error loading data. Check console.</p>';
+            }
+        }
+
+        function renderDashboard() {
+            renderAlphabetCards();
+            renderRemainingLetters();
+            initMap();
+        }
+
+        function renderAlphabetCards() {
+            const container = document.getElementById('alphabet-cards');
+            container.innerHTML = '';
+
+            for (let alphabet = 1; alphabet <= 4; alphabet++) {
+                let totalLetters = 0;
+                let completionDate = null;
+
+                ['lisa', 'beth'].forEach(person => {
+                    const letters = Object.keys(allData[person]?.alphabets?.[alphabet] || {});
+                    totalLetters = Math.max(totalLetters, letters.length);
+                    
+                    if (letters.length === 26) {
+                        const lastDate = Object.values(allData[person].alphabets[alphabet])
+                            .map(r => new Date(r.date))
+                            .sort((a, b) => b - a)[0];
+                        completionDate = lastDate?.toLocaleDateString('en-GB');
+                    }
+                });
+
+                const isComplete = totalLetters === 26;
+                const progress = Math.round((totalLetters / 26) * 100);
+
+                let html = `
+                    <div class="alphabet-card ${isComplete ? 'complete' : ''}">
+                        <h2>Alphabet ${alphabet}</h2>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${progress}%"></div>
+                        </div>
+                        <div class="progress-text">${totalLetters}/26 letters</div>
+                `;
+
+                if (completionDate) {
+                    html += `<div class="completion-date">Completed: ${completionDate}</div>`;
+                }
+
+                html += '</div>';
+                container.innerHTML += html;
+            }
+        }
+
+        function renderRemainingLetters() {
+            const container = document.getElementById('remaining-letters');
+            container.innerHTML = '';
+
+            // Get combined remaining letters (union of both athletes' needs)
+            const lisa_remaining = new Set(allData.lisa?.remaining_letters || []);
+            const beth_remaining = new Set(allData.beth?.remaining_letters || []);
+            const all_remaining = new Set([...lisa_remaining, ...beth_remaining]);
+
+            all_remaining.forEach(letter => {
+                const tag = document.createElement('div');
+                tag.className = 'letter-tag';
+                tag.textContent = letter;
+                container.appendChild(tag);
+            });
+
+            // Add recommendations
+            renderRecommendations(all_remaining);
+        }
+
+        function renderRecommendations(remaining_letters) {
+            const container = document.getElementById('recommendations');
+            container.innerHTML = '<h3>Recommendations by Distance</h3>';
+
+            const recommendations = [];
+
+            remaining_letters.forEach(letter => {
+                // Find unvisited parkruns for this letter (would need global parkrun database)
+                // For now, show which athlete needs it
+                const lisa_needs = !allData.lisa?.alphabets?.[4]?.[letter];
+                const beth_needs = !allData.beth?.alphabets?.[4]?.[letter];
+
+                recommendations.push({
+                    letter: letter,
+                    lisa_needs: lisa_needs,
+                    beth_needs: beth_needs,
+                    joint: lisa_needs && beth_needs
+                });
+            });
+
+            let html = '';
+            recommendations.forEach(rec => {
+                let need_text = rec.joint ? 'Both need' : (rec.lisa_needs ? 'Lisa needs' : 'Beth needs');
+                html += `
+                    <div class="rec-card">
+                        <span class="rec-letter">${rec.letter}</span>
+                        <span style="color: #666; margin-left: 10px;">${need_text}</span>
+                    </div>
+                `;
+            });
+
+            container.innerHTML += html;
+        }
+
+        function initMap() {
+            if (map) map.remove();
+            map = L.map('map').setView([52.0, -1.5], 6);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+
+            // Add starting locations
+            Object.entries(LOCATIONS).forEach(([key, loc]) => {
+                L.circleMarker([loc.lat, loc.lng], {
+                    radius: 8,
+                    fillColor: '#2196f3',
+                    color: '#1565c0',
+                    weight: 2
+                }).bindPopup(loc.name).addTo(map);
+            });
+
+            // Update last updated timestamp
+            const lisa_updated = allData.lisa?.last_updated || 'Unknown';
+            document.getElementById('last-updated').textContent = `Last updated: ${lisa_updated}`;
+        }
+
+        window.addEventListener('load', loadData);
+    </script>
+</body>
+</html>

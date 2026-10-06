@@ -1,0 +1,12 @@
+{
+  "name": "parkrun-alphabet-4",
+  "version": "1.0.0",
+  "description": "Parkrun Alphabet 4 Challenge Dashboard",
+  "scripts": {
+    "scrape": "python3 fetch-parkrun-data.py",
+    "serve": "python3 -m http.server 8080"
+  },
+  "keywords": ["parkrun", "alphabet", "challenge"],
+  "author": "",
+  "license": "MIT"
+}
