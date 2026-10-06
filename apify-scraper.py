@@ -350,9 +350,12 @@ def parse_runs(raw_runs):
 def group_by_alphabet(runs):
     if not runs:
         return {}, {}, {}
+    # Only A-Z letters count toward the alphabet challenge
     letters = {}
     for run in runs:
         letter = run['letter']
+        if not letter.isalpha():
+            continue  # Skip courses starting with digits/punctuation
         if letter not in letters:
             letters[letter] = []
         letters[letter].append(run)
