@@ -194,8 +194,11 @@ def main():
                 )
                 log(f"[*] Homepage title: {warmup_page.title()}")
                 # Allow JS WAF challenge to execute and set cookies
-                warmup_page.wait_for_timeout(5000)
-                log(f"[*] Cookies after warmup: {len(context.cookies())}")
+                warmup_page.wait_for_timeout(8000)
+                cookies = context.cookies()
+                log(f"[*] Cookies after warmup: {len(cookies)}")
+                for c in cookies:
+                    log(f"[*]   Cookie: {c['name']}={c['value'][:20]}... domain={c['domain']}")
             except Exception as e:
                 log(f"[!] Homepage warmup error: {e}")
             finally:

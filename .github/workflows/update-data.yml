@@ -31,6 +31,8 @@ jobs:
           playwright install chromium --with-deps
 
       - name: Fetch parkrun data
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
         run: |
           rm -f parkrun-data.json
           python apify-scraper.py || true
