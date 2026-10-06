@@ -33,31 +33,43 @@ jobs:
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
         run: |
-          echo "=== Run started: $(date -u) ===" > debug-run.txt
-          echo "Python: $(python --version 2>&1)" >> debug-run.txt
-          echo "Requests version: $(python -c 'import requests; print(requests.__version__)' 2>&1)" >> debug-run.txt
-          echo "APIFY_TOKEN set: $([ -n "$APIFY_TOKEN" ] && echo YES_len=${#APIFY_TOKEN} || echo NO)" >> debug-run.txt
+          echo "=== Run started: $(date -u) ===" | tee debug-run.txt
+          echo "Python: $(python --version 2>&1)" | tee -a debug-run.txt
+          echo "Requests: $(python -c 'import requests; print(requests.__version__)' 2>&1)" | tee -a debug-run.txt
+          echo "APIFY_TOKEN: $([ -n "$APIFY_TOKEN" ] && echo "SET (length=${#APIFY_TOKEN})" || echo "NOT SET")" | tee -a debug-run.txt
           # Remove stale parkrun-data.json so we only commit a freshly-generated one
           rm -f parkrun-data.json
-          echo "=== Script output ===" >> debug-run.txt
-          python apify-scraper.py >> debug-run.txt 2>&1 || echo "Script exited non-zero" >> debug-run.txt
-          echo "=== Files after script ===" >> debug-run.txt
-          ls -la . 2>&1 >> debug-run.txt
-          echo "=== Run ended: $(date -u) ===" >> debug-run.txt
-          echo ""
-          echo "===== DEBUG LOG ====="
-          cat debug-run.txt
-          echo "===== END DEBUG LOG ====="
+          echo "=== Script output ===" | tee -a debug-run.txt
+          python apify-scraper.py 2>&1 | tee -a debug-run.txt
+          echo "Exit code: $?" | tee -a debug-run.txt
+          echo "=== Files after script ===" | tee -a debug-run.txt
+          ls -la . 2>&1 | tee -a debug-run.txt
+          echo "=== Run ended: $(date -u) ===" | tee -a debug-run.txt
 
-      - name: Commit debug log to repo
+      - name: Publish debug log to repo
         if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main || true
-          git add debug-run.txt
-          git diff --staged --quiet || git commit -m "debug: run log $(date -u +%Y-%m-%dT%H:%M)"
-          git push origin main || echo "Push failed"
+          echo "--- Uploading debug-run.txt via gh api ---"
+          CONTENT=$(base64 -w 0 debug-run.txt)
+          SHA=$(gh api "repos/$GITHUB_REPOSITORY/contents/debug-run.txt" --jq '.sha' 2>/dev/null || true)
+          if [ -n "$SHA" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/contents/debug-run.txt" \
+              -X PUT \
+              -f message="debug: run log $(date -u +%Y-%m-%dT%H:%M)" \
+              -f "content=$CONTENT" \
+              -f "sha=$SHA" \
+              && echo "Updated debug-run.txt (sha=$SHA)" \
+              || echo "FAILED to update debug-run.txt"
+          else
+            gh api "repos/$GITHUB_REPOSITORY/contents/debug-run.txt" \
+              -X PUT \
+              -f message="debug: run log $(date -u +%Y-%m-%dT%H:%M)" \
+              -f "content=$CONTENT" \
+              && echo "Created debug-run.txt" \
+              || echo "FAILED to create debug-run.txt"
+          fi
 
       - name: Check if fresh data was generated
         id: changes
@@ -66,7 +78,7 @@ jobs:
             echo "Data file generated successfully"
             echo "changed=true" >> $GITHUB_OUTPUT
           else
-            echo "No data file - scraper likely failed"
+            echo "No data file - scraper failed, check debug-run.txt in repo"
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
 
