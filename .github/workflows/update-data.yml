@@ -26,18 +26,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests
-
-      - name: Debug parkrun API response
-        run: python debug_api.py
-
-      - name: Commit debug response
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "Parkrun Data Bot"
-          git add debug-raw-response.json
-          git diff --staged --quiet || git commit -m "debug: save raw API response"
-          git push origin HEAD:main
+          pip install playwright requests
+          playwright install chromium --with-deps
 
       - name: Fetch parkrun data
         run: python apify-scraper.py
