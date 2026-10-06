@@ -175,6 +175,7 @@ def main():
     log("=" * 70)
 
     apify_token = os.environ.get('APIFY_TOKEN')
+    log(f"[*] APIFY_TOKEN present: {bool(apify_token)}, length: {len(apify_token) if apify_token else 0}")
     session = make_session(apify_token)
 
     all_data = {}
