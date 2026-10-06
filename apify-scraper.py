@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Parkrun scraper: uses Apify proxy to bypass AWS WAF, then calls AJAX endpoint."""
+"""Parkrun scraper: deploys a minimal actor to Apify's cloud to bypass AWS WAF."""
 import sys
 import json
 import os
 import requests
+import time
 import traceback
 from datetime import datetime
 
@@ -12,15 +13,48 @@ ATHLETES = {
     '2475659': {'name': 'Beth', 'location': 'Cheltenham'}
 }
 
-PARKRUN_API = 'https://www.parkrun.org.uk/results/athleteresultshistory/'
+PARKRUN_AJAX = 'https://www.parkrun.org.uk/results/athleteresultshistory/'
+APIFY_BASE = 'https://api.apify.com/v2'
+ACTOR_NAME = 'parkrun-data-fetcher'
 
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'application/json, text/javascript, */*; q=0.01',
-    'Accept-Language': 'en-GB,en;q=0.9',
-    'Referer': 'https://www.parkrun.org.uk/',
-    'X-Requested-With': 'XMLHttpRequest',
+# Runs on Apify's servers (trusted IPs that bypass parkrun WAF)
+ACTOR_JS = """\
+import { Actor } from 'apify';
+
+await Actor.init();
+const { athleteIds, baseUrl, headers } = await Actor.getInput();
+const results = {};
+
+for (const athleteId of athleteIds) {
+    console.log(`Fetching athlete ${athleteId}...`);
+    const allRuns = [];
+    let offset = 0;
+    while (true) {
+        const url = `${baseUrl}?athleteNumber=${athleteId}&offset=${offset}&nbRecords=100`;
+        const resp = await fetch(url, { headers });
+        console.log(`  offset=${offset}: HTTP ${resp.status}`);
+        if (!resp.ok) { console.log('  body:', (await resp.text()).slice(0, 200)); break; }
+        const data = await resp.json();
+        const runs = data?.data?.Results ?? [];
+        console.log(`  got ${runs.length} runs`);
+        allRuns.push(...runs);
+        if (runs.length < 100) break;
+        offset += 100;
+    }
+    results[athleteId] = allRuns;
+    console.log(`Total for ${athleteId}: ${allRuns.length}`);
 }
+
+await Actor.setValue('OUTPUT', results);
+await Actor.exit();
+"""
+
+PACKAGE_JSON = json.dumps({
+    "name": "parkrun-data-fetcher",
+    "version": "0.0.1",
+    "type": "module",
+    "dependencies": {"apify": "^3.0.0"}
+})
 
 LOG = []
 
@@ -38,83 +72,118 @@ def save_debug(extra=None):
         json.dump(debug, f, indent=2, default=str)
 
 
-def make_session(apify_token):
-    """Create a requests session routed through Apify proxy."""
-    session = requests.Session()
-    if apify_token:
-        # Apify proxy: auto mode picks best proxy type for the target URL
-        proxy_url = f'http://groups-DATACENTER:{apify_token}@proxy.apify.com:8000'
-        session.proxies = {'http': proxy_url, 'https': proxy_url}
-        log("[*] Using Apify DATACENTER proxy to bypass WAF")
-    else:
-        log("[!] No APIFY_TOKEN — direct requests (may hit WAF)")
-    session.headers.update(HEADERS)
-    return session
+def api_get(path, token):
+    r = requests.get(f'{APIFY_BASE}{path}', params={'token': token}, timeout=30)
+    r.raise_for_status()
+    return r.json()
 
 
-def fetch_athlete_runs(session, athlete_id):
-    athlete_info = ATHLETES[athlete_id]
-    name = athlete_info['name']
-    log(f"\n[*] Fetching {name} ({athlete_id})...")
+def api_post(path, token, data=None, extra_params=None):
+    params = {'token': token}
+    if extra_params:
+        params.update(extra_params)
+    r = requests.post(f'{APIFY_BASE}{path}', params=params, json=data, timeout=60)
+    if not r.ok:
+        log(f"[-] API error {r.status_code}: {r.text[:300]}")
+    r.raise_for_status()
+    return r.json()
 
-    all_results = []
-    offset = 0
-    batch_size = 100
 
-    while True:
-        params = {
-            'athleteNumber': athlete_id,
-            'offset': offset,
-            'nbRecords': batch_size
+def get_or_create_actor(token):
+    """Return actor ID, creating and building it if needed."""
+    # Check for existing actor
+    actors = api_get('/acts?my=true&limit=100', token).get('data', {}).get('items', [])
+    for actor in actors:
+        if actor['name'] == ACTOR_NAME:
+            log(f"[+] Found existing actor: {actor['id']}")
+            return actor['id']
+
+    # Create actor
+    log("[*] Creating Apify actor...")
+    actor_id = api_post('/acts', token, {
+        'name': ACTOR_NAME,
+        'isPublic': False,
+        'defaultRunOptions': {'timeoutSecs': 180, 'memoryMbytes': 256}
+    })['data']['id']
+    log(f"[+] Actor created: {actor_id}")
+
+    # Upload source code
+    api_post(f'/acts/{actor_id}/versions', token, {
+        'versionNumber': '0.0',
+        'sourceType': 'SOURCE_FILES',
+        'buildTag': 'latest',
+        'sourceFiles': [
+            {'name': 'src/main.js', 'format': 'TEXT', 'content': ACTOR_JS},
+            {'name': 'package.json', 'format': 'TEXT', 'content': PACKAGE_JSON},
+        ]
+    })
+    log("[+] Source uploaded")
+
+    # Build actor
+    build_id = api_post(f'/acts/{actor_id}/builds', token, extra_params={
+        'version': '0.0', 'tag': 'latest'
+    })['data']['id']
+    log(f"[*] Building actor (id={build_id})...")
+
+    for i in range(60):
+        time.sleep(10)
+        build = api_get(f'/actor-builds/{build_id}', token)['data']
+        status = build['status']
+        log(f"[*]   build status: {status} ({(i+1)*10}s)")
+        if status == 'SUCCEEDED':
+            log("[+] Build succeeded")
+            return actor_id
+        if status in ['FAILED', 'ABORTED', 'TIMED-OUT']:
+            raise Exception(f"Build failed: {status}\n{build.get('log', '')}")
+
+    raise Exception("Build timed out")
+
+
+def run_actor(token, actor_id):
+    """Run the actor and return {athlete_id: [run_dicts]}."""
+    run_input = {
+        'athleteIds': list(ATHLETES.keys()),
+        'baseUrl': PARKRUN_AJAX,
+        'headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Accept-Language': 'en-GB,en;q=0.9',
+            'Referer': 'https://www.parkrun.org.uk/',
+            'X-Requested-With': 'XMLHttpRequest',
         }
+    }
 
-        try:
-            r = session.get(PARKRUN_API, params=params, timeout=30)
-        except requests.RequestException as e:
-            log(f"[-] Request error at offset={offset}: {e}")
+    log(f"[*] Running actor {actor_id}...")
+    run_id = api_post(f'/acts/{actor_id}/runs', token, run_input)['data']['id']
+    log(f"[*] Run ID: {run_id}")
+
+    # Poll for completion
+    for i in range(36):  # 6 minutes max
+        time.sleep(10)
+        run = api_get(f'/actor-runs/{run_id}', token)['data']
+        status = run['status']
+        log(f"[*]   run status: {status} ({(i+1)*10}s)")
+        if status == 'SUCCEEDED':
             break
+        if status in ['FAILED', 'ABORTED', 'TIMED-OUT']:
+            raise Exception(f"Run failed: {status}")
+    else:
+        raise Exception("Run timed out")
 
-        log(f"[+] HTTP {r.status_code} | Content-Type: {r.headers.get('Content-Type', '?')}")
-
-        if r.status_code != 200:
-            log(f"[-] Non-200. Response (first 500): {r.text[:500]}")
-            break
-
-        try:
-            data = r.json()
-        except Exception as e:
-            log(f"[-] JSON parse error: {e} | Response: {r.text[:500]}")
-            break
-
-        log(f"[*] Top-level keys: {list(data.keys())}")
-
-        results = data.get('data', {}).get('Results', [])
-        log(f"[+] Got {len(results)} results at offset={offset}")
-
-        if not results:
-            if 'data' in data:
-                sub = data['data']
-                log(f"[*] data sub-keys: {list(sub.keys()) if isinstance(sub, dict) else type(sub)}")
-            break
-
-        if offset == 0 and results:
-            log(f"[*] First result keys: {list(results[0].keys())}")
-            log(f"[*] First result: {json.dumps(results[0], indent=2, default=str)}")
-
-        all_results.extend(results)
-
-        if len(results) < batch_size:
-            break
-        offset += batch_size
-
-    log(f"[+] Total fetched: {len(all_results)} runs")
-    return all_results
+    # Get OUTPUT from key-value store
+    kv_id = run['defaultKeyValueStoreId']
+    log(f"[*] Fetching output from KV store {kv_id}...")
+    r = requests.get(
+        f'{APIFY_BASE}/key-value-stores/{kv_id}/records/OUTPUT',
+        params={'token': token}, timeout=30
+    )
+    r.raise_for_status()
+    return r.json()
 
 
 def parse_runs(raw_runs):
     if not raw_runs:
         return None
-
     runs = []
     for item in raw_runs:
         date_str = (item.get('EventDate') or item.get('RunDate') or
@@ -122,10 +191,8 @@ def parse_runs(raw_runs):
         course = (item.get('EventLongName') or item.get('EventName') or
                   item.get('event') or item.get('courseName') or
                   item.get('name') or '')
-
         if not date_str or not course:
             continue
-
         letter = course[0].upper()
         runs.append({
             'date': str(date_str),
@@ -133,7 +200,6 @@ def parse_runs(raw_runs):
             'time': str(item.get('RunTime') or item.get('time') or ''),
             'letter': letter
         })
-
     log(f"[+] Parsed {len(runs)} valid runs")
     return runs if runs else None
 
@@ -141,14 +207,12 @@ def parse_runs(raw_runs):
 def group_by_alphabet(runs):
     if not runs:
         return {}, {}, {}
-
     letters = {}
     for run in runs:
         letter = run['letter']
         if letter not in letters:
             letters[letter] = []
         letters[letter].append(run)
-
     alphabet_map = {}
     for letter in sorted(letters.keys()):
         for idx, run in enumerate(sorted(letters[letter], key=lambda x: x['date'])):
@@ -156,7 +220,6 @@ def group_by_alphabet(runs):
             if alphabet_num not in alphabet_map:
                 alphabet_map[alphabet_num] = []
             alphabet_map[alphabet_num].append(letter)
-
     result = {}
     for alphabet_num in range(1, 5):
         done = set(alphabet_map.get(alphabet_num, []))
@@ -165,32 +228,44 @@ def group_by_alphabet(runs):
             'completed': len(done),
             'remaining': sorted([chr(i) for i in range(65, 91) if chr(i) not in done])
         }
-
     return result, alphabet_map, letters
 
 
 def main():
     log("=" * 70)
-    log("PARKRUN DATA SCRAPER - Apify Proxy + Direct AJAX")
+    log("PARKRUN DATA SCRAPER - Apify Actor API")
     log("=" * 70)
 
     apify_token = os.environ.get('APIFY_TOKEN')
-    log(f"[*] APIFY_TOKEN present: {bool(apify_token)}, length: {len(apify_token) if apify_token else 0}")
-    session = make_session(apify_token)
+    if not apify_token:
+        log("[-] APIFY_TOKEN not set — aborting")
+        save_debug()
+        sys.exit(1)
+    log(f"[*] APIFY_TOKEN present, length={len(apify_token)}")
+
+    try:
+        actor_id = get_or_create_actor(apify_token)
+        raw_output = run_actor(apify_token, actor_id)
+    except Exception as e:
+        log(f"[-] Actor error: {e}")
+        log(traceback.format_exc())
+        save_debug()
+        sys.exit(1)
+
+    log(f"[*] Raw output keys: {list(raw_output.keys())}")
 
     all_data = {}
-
     for athlete_id, athlete_info in ATHLETES.items():
-        try:
-            raw_runs = fetch_athlete_runs(session, athlete_id)
-        except Exception as e:
-            log(f"[-] Error fetching {athlete_info['name']}: {e}")
-            log(traceback.format_exc())
-            continue
+        raw_runs = raw_output.get(athlete_id, [])
+        log(f"\n[*] {athlete_info['name']}: {len(raw_runs)} raw runs")
 
         if not raw_runs:
-            log(f"[!] No runs fetched for {athlete_info['name']}")
+            log(f"[!] No runs for {athlete_info['name']}")
             continue
+
+        if raw_runs and isinstance(raw_runs[0], dict):
+            log(f"[*] First run keys: {list(raw_runs[0].keys())}")
+            log(f"[*] First run: {json.dumps(raw_runs[0], indent=2, default=str)}")
 
         runs = parse_runs(raw_runs)
         if not runs:
