@@ -1,12 +1,11 @@
 {
   "log": [
     "======================================================================",
-    "PARKRUN DATA SCRAPER - Python Playwright + Apify Proxy",
+    "PARKRUN DATA SCRAPER - Python Playwright",
     "======================================================================",
-    "[*] APIFY_TOKEN present, length=46",
-    "[*] Proxy: http://proxy.apify.com:8000 (RESIDENTIAL)",
+    "[*] APIFY_TOKEN present (len=46) \u2014 will use residential proxy",
     "[*] Warming up: visiting parkrun.org.uk homepage...",
-    "[!] Homepage warmup error: Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"https://www.parkrun.org.uk/\", waiting until \"domcontentloaded\"\n",
+    "[!] Homepage warmup error: Page.goto: Timeout 60000ms exceeded.\nCall log:\n  - navigating to \"https://www.parkrun.org.uk/\", waiting until \"domcontentloaded\"\n",
     "\n[*] Fetching Lisa (athlete 3934942)...",
     "[*]   GET https://www.parkrun.org.uk/results/athleteresultshistory/?athleteNumber=3934942&offset=0&nbRecords=100",
     "[*]   HTTP 407",
