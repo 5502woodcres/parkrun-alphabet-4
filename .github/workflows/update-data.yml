@@ -29,56 +29,44 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
 
+      - name: Verify APIFY_TOKEN is set
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: |
+          if [ -z "$APIFY_TOKEN" ]; then
+            echo "FATAL: APIFY_TOKEN secret is not set or is empty"
+            exit 1
+          fi
+          echo "APIFY_TOKEN is set (length=${#APIFY_TOKEN})"
+
       - name: Fetch parkrun data
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
         run: |
-          echo "=== Run started: $(date -u) ===" | tee debug-run.txt
-          echo "Python: $(python --version 2>&1)" | tee -a debug-run.txt
-          echo "Requests: $(python -c 'import requests; print(requests.__version__)' 2>&1)" | tee -a debug-run.txt
-          echo "APIFY_TOKEN: $([ -n "$APIFY_TOKEN" ] && echo "SET (length=${#APIFY_TOKEN})" || echo "NOT SET")" | tee -a debug-run.txt
-          # Remove stale parkrun-data.json so we only commit a freshly-generated one
+          echo "=== Run started: $(date -u) ==="
+          echo "APIFY_TOKEN length: ${#APIFY_TOKEN}"
           rm -f parkrun-data.json
-          echo "=== Script output ===" | tee -a debug-run.txt
-          python apify-scraper.py 2>&1 | tee -a debug-run.txt
-          echo "Exit code: $?" | tee -a debug-run.txt
-          echo "=== Files after script ===" | tee -a debug-run.txt
-          ls -la . 2>&1 | tee -a debug-run.txt
-          echo "=== Run ended: $(date -u) ===" | tee -a debug-run.txt
+          python apify-scraper.py
+          echo "=== Script finished ==="
+          ls -la parkrun-data.json 2>/dev/null || echo "parkrun-data.json NOT generated"
 
-      - name: Publish debug log to repo
+      - name: Upload debug log via Python
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "--- Uploading debug-run.txt via gh api ---"
-          CONTENT=$(base64 -w 0 debug-run.txt)
-          SHA=$(gh api "repos/$GITHUB_REPOSITORY/contents/debug-run.txt" --jq '.sha' 2>/dev/null || true)
-          if [ -n "$SHA" ]; then
-            gh api "repos/$GITHUB_REPOSITORY/contents/debug-run.txt" \
-              -X PUT \
-              -f message="debug: run log $(date -u +%Y-%m-%dT%H:%M)" \
-              -f "content=$CONTENT" \
-              -f "sha=$SHA" \
-              && echo "Updated debug-run.txt (sha=$SHA)" \
-              || echo "FAILED to update debug-run.txt"
-          else
-            gh api "repos/$GITHUB_REPOSITORY/contents/debug-run.txt" \
-              -X PUT \
-              -f message="debug: run log $(date -u +%Y-%m-%dT%H:%M)" \
-              -f "content=$CONTENT" \
-              && echo "Created debug-run.txt" \
-              || echo "FAILED to create debug-run.txt"
-          fi
+          # Write a simple status file we can read from the API
+          echo "Run: $(date -u)" > debug-run.txt
+          echo "APIFY_TOKEN_SET: ${{ secrets.APIFY_TOKEN != '' && 'yes' || 'no' }}" >> debug-run.txt
+          ls -la >> debug-run.txt 2>&1
+          python gh-upload.py debug-run.txt debug-run.txt "debug: status $(date -u +%Y-%m-%dT%H:%M)"
 
       - name: Check if fresh data was generated
         id: changes
         run: |
           if [ -f parkrun-data.json ]; then
-            echo "Data file generated successfully"
             echo "changed=true" >> $GITHUB_OUTPUT
           else
-            echo "No data file - scraper failed, check debug-run.txt in repo"
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
 
@@ -91,4 +79,4 @@ jobs:
 
       - name: No data generated
         if: steps.changes.outputs.changed == 'false'
-        run: echo "parkrun-data.json not generated - check debug-run.txt committed to repo"
+        run: echo "parkrun-data.json not generated"
