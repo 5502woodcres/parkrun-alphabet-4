@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Parkrun scraper: Playwright headless browser to bypass AWS WAF JS challenge.
+"""Parkrun scraper: bypasses AWS WAF on parkrun.org.uk.
 
-Strategy:
-  1. If APIFY_TOKEN set → use Apify residential proxy (bypasses IP block)
-  2. If proxy fails or no token → try direct with playwright-stealth (avoids headless detection)
+Strategy (in order):
+  1. ScraperAPI (free tier, 1k req/month) — no browser needed, handles WAF+IP
+  2. Apify residential proxy + Playwright — bypasses IP block (requires paid plan)
+  3. Direct Playwright with stealth — fallback (usually blocked by GitHub Actions IP)
+  4. Patchright (stealth Chromium fork) — last resort
 """
 import sys
 import json
@@ -11,6 +13,7 @@ import os
 import traceback
 import urllib.request
 import urllib.error
+import urllib.parse
 from datetime import datetime
 
 ATHLETES = {
@@ -19,6 +22,7 @@ ATHLETES = {
 }
 
 PARKRUN_AJAX = 'https://www.parkrun.org.uk/results/athleteresultshistory/'
+SCRAPERAPI_BASE = 'https://api.scraperapi.com/'
 
 LOG = []
 
@@ -34,6 +38,127 @@ def save_debug(extra=None):
         debug.update(extra)
     with open('debug-scraper.json', 'w') as f:
         json.dump(debug, f, indent=2, default=str)
+
+
+def scraperapi_get(api_key, url, render_js=False, timeout=60):
+    """Fetch URL via ScraperAPI (handles WAF + residential IP rotation)."""
+    params = {
+        'api_key': api_key,
+        'url': url,
+        'country_code': 'gb',
+    }
+    if render_js:
+        params['render'] = 'true'
+    api_url = SCRAPERAPI_BASE + '?' + urllib.parse.urlencode(params)
+    req = urllib.request.Request(api_url, headers={
+        'Accept': 'application/json, text/html, */*',
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read().decode('utf-8', errors='replace')
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')
+        return e.code, body
+
+
+def fetch_athlete_via_scraperapi(api_key, athlete_id):
+    """Fetch athlete run data via ScraperAPI — no browser required.
+
+    Tries AJAX JSON endpoint first (cheap, no render). Falls back to
+    HTML profile page (render_js=True, costs 5 credits on ScraperAPI).
+    """
+    # Attempt 1: AJAX JSON endpoint
+    ajax_url = (f"{PARKRUN_AJAX}?athleteNumber={athlete_id}"
+                f"&offset=0&nbRecords=999")
+    log(f"[*]   ScraperAPI AJAX: {ajax_url}")
+    status, body = scraperapi_get(api_key, ajax_url, render_js=False)
+    log(f"[*]   HTTP {status} — body[:80]: {body[:80]}")
+
+    if status == 200 and not body.lstrip().startswith('<'):
+        try:
+            data = json.loads(body)
+            runs = (data.get('data') or {}).get('Results') or []
+            log(f"[+]   AJAX returned {len(runs)} runs")
+            return runs, 'ajax'
+        except json.JSONDecodeError as e:
+            log(f"[!]   JSON decode error: {e}")
+
+    # Attempt 2: HTML athlete page with JS rendering
+    html_url = f'https://www.parkrun.org.uk/parkrunner/{athlete_id}/all/'
+    log(f"[*]   ScraperAPI HTML (render_js=True): {html_url}")
+    status, html = scraperapi_get(api_key, html_url, render_js=True, timeout=90)
+    log(f"[*]   HTTP {status} — html[:80]: {html[:80]}")
+
+    if status != 200:
+        log(f"[!]   HTML fetch failed: {status}")
+        return [], None
+
+    # Parse HTML table
+    runs = []
+    import re
+    rows = re.findall(r'<tr[^>]*>(.*?)</tr>', html, re.DOTALL | re.IGNORECASE)
+    for row_html in rows:
+        cells = re.findall(r'<td[^>]*>(.*?)</td>', row_html, re.DOTALL | re.IGNORECASE)
+        cells = [re.sub(r'<[^>]+>', '', c).strip() for c in cells]
+        if len(cells) >= 2 and cells[0] and cells[1]:
+            course = cells[0]
+            date_str = cells[1] if len(cells) > 1 else ''
+            time_str = cells[3] if len(cells) > 3 else ''
+            if course and date_str and not course.lower().startswith('event'):
+                runs.append({
+                    'date': date_str,
+                    'course': course,
+                    'time': time_str,
+                    'letter': course[0].upper()
+                })
+
+    log(f"[+]   HTML parsed {len(runs)} runs")
+    return runs, 'html'
+
+
+def scrape_via_scraperapi(api_key):
+    """Fetch all athletes' runs via ScraperAPI. Returns {} on failure."""
+    log(f"\n[*] ScraperAPI strategy")
+    all_data = {}
+
+    for athlete_id, athlete_info in ATHLETES.items():
+        log(f"\n[*] Fetching {athlete_info['name']} (athlete {athlete_id}) via ScraperAPI...")
+        raw_runs, source = fetch_athlete_via_scraperapi(api_key, athlete_id)
+
+        if not raw_runs:
+            log(f"[!] No runs obtained for {athlete_info['name']} via ScraperAPI")
+            continue
+
+        # Parse if from AJAX (already dicts with API field names)
+        if source == 'ajax':
+            runs = parse_runs(raw_runs)
+        else:
+            runs = raw_runs  # already parsed from HTML
+
+        if not runs:
+            log(f"[!] Failed to parse runs for {athlete_info['name']}")
+            continue
+
+        alphabet_status, alphabet_map, letters_data = group_by_alphabet(runs)
+        all_data[athlete_id] = {
+            'name': athlete_info['name'],
+            'athlete_id': athlete_id,
+            'location': athlete_info['location'],
+            'total_runs': len(runs),
+            'alphabet_status': alphabet_status,
+            'runs_per_letter': {ltr: len(r) for ltr, r in letters_data.items()},
+            'last_updated': datetime.now().isoformat()
+        }
+
+        log(f"\n[+] {athlete_info['name']} Summary:")
+        for alph_key, alph_data in alphabet_status.items():
+            alph_num = alph_key.split('_')[1]
+            letters_str = ', '.join(alph_data['letters'][:5])
+            if len(alph_data['letters']) > 5:
+                letters_str += '...'
+            log(f"    Alphabet {alph_num}: {alph_data['completed']}/26 ({letters_str})")
+
+    return all_data
 
 
 def apply_stealth(page):
@@ -416,15 +541,22 @@ def run_scraper_patchright(proxy_config=None):
 
 def main():
     log("=" * 70)
-    log("PARKRUN DATA SCRAPER - Python Playwright")
+    log("PARKRUN DATA SCRAPER")
     log("=" * 70)
 
+    scraperapi_key = os.environ.get('SCRAPERAPI_KEY', '')
     apify_token = os.environ.get('APIFY_TOKEN', '')
+
+    if scraperapi_key:
+        log(f"[*] SCRAPERAPI_KEY present (len={len(scraperapi_key)})")
+    else:
+        log("[*] No SCRAPERAPI_KEY set")
+
     if apify_token:
         prefix = apify_token[:10] if len(apify_token) >= 10 else apify_token
         log(f"[*] APIFY_TOKEN present (len={len(apify_token)}, prefix={prefix})")
 
-        # Verify the token against Apify REST API (independent of proxy access)
+        # Verify the token against Apify REST API
         try:
             req = urllib.request.Request(
                 'https://api.apify.com/v2/users/me',
@@ -442,58 +574,72 @@ def main():
     else:
         log("[*] No APIFY_TOKEN set")
 
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        log("[-] playwright not installed")
-        save_debug()
-        sys.exit(1)
-
     all_data = {}
 
-    with sync_playwright() as pw:
-        # Attempt 1: Apify residential proxy (if token available)
-        if apify_token:
-            proxy_config = {
-                'server': 'http://proxy.apify.com:8000',
-                'username': 'auto',
-                'password': apify_token,
-            }
-            try:
-                all_data = run_scraper(pw, proxy_config)
-                if all_data:
-                    log("[+] Proxy scrape succeeded")
-                else:
-                    log("[!] Proxy scrape returned no data")
-            except Exception as e:
-                log(f"[-] Proxy scrape error: {e}")
-                log(traceback.format_exc())
-
-        # Attempt 2: Direct connection with stealth (fallback or if no token)
-        if not all_data:
-            log("\n[*] Falling back to direct connection with stealth...")
-            try:
-                all_data = run_scraper(pw, proxy_config=None)
-                if all_data:
-                    log("[+] Direct scrape succeeded")
-                else:
-                    log("[!] Direct scrape returned no data")
-            except Exception as e:
-                log(f"[-] Direct scrape error: {e}")
-                log(traceback.format_exc())
-
-    # Attempt 3: patchright direct (stealthier Chromium fork, better WAF bypass)
-    if not all_data:
-        log("\n[*] Trying patchright (stealth Chromium fork)...")
+    # Attempt 1: ScraperAPI (no browser needed, free tier = 1k req/month)
+    if scraperapi_key and not all_data:
         try:
-            all_data = run_scraper_patchright(proxy_config=None)
+            all_data = scrape_via_scraperapi(scraperapi_key)
             if all_data:
-                log("[+] Patchright direct scrape succeeded")
+                log("[+] ScraperAPI scrape succeeded")
             else:
-                log("[!] Patchright direct scrape returned no data")
+                log("[!] ScraperAPI scrape returned no data")
         except Exception as e:
-            log(f"[-] Patchright error: {e}")
+            log(f"[-] ScraperAPI error: {e}")
             log(traceback.format_exc())
+
+    # Attempts 2-4: Playwright-based (proxy + direct + patchright)
+    if not all_data:
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            log("[-] playwright not installed")
+            save_debug()
+            sys.exit(1)
+
+        with sync_playwright() as pw:
+            # Attempt 2: Apify residential proxy
+            if apify_token and not all_data:
+                proxy_config = {
+                    'server': 'http://proxy.apify.com:8000',
+                    'username': 'auto',
+                    'password': apify_token,
+                }
+                try:
+                    all_data = run_scraper(pw, proxy_config)
+                    if all_data:
+                        log("[+] Proxy scrape succeeded")
+                    else:
+                        log("[!] Proxy scrape returned no data")
+                except Exception as e:
+                    log(f"[-] Proxy scrape error: {e}")
+                    log(traceback.format_exc())
+
+            # Attempt 3: Direct connection with stealth
+            if not all_data:
+                log("\n[*] Falling back to direct connection with stealth...")
+                try:
+                    all_data = run_scraper(pw, proxy_config=None)
+                    if all_data:
+                        log("[+] Direct scrape succeeded")
+                    else:
+                        log("[!] Direct scrape returned no data")
+                except Exception as e:
+                    log(f"[-] Direct scrape error: {e}")
+                    log(traceback.format_exc())
+
+        # Attempt 4: patchright direct
+        if not all_data:
+            log("\n[*] Trying patchright (stealth Chromium fork)...")
+            try:
+                all_data = run_scraper_patchright(proxy_config=None)
+                if all_data:
+                    log("[+] Patchright direct scrape succeeded")
+                else:
+                    log("[!] Patchright direct scrape returned no data")
+            except Exception as e:
+                log(f"[-] Patchright error: {e}")
+                log(traceback.format_exc())
 
     save_debug()
 

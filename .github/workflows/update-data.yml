@@ -58,6 +58,7 @@ jobs:
 
       - name: Fetch parkrun data
         env:
+          SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
         run: |
           rm -f parkrun-data.json
