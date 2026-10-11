@@ -3,7 +3,7 @@
     "name": "Lisa",
     "athlete_id": "3934942",
     "location": "Chepstow",
-    "total_runs": 181,
+    "total_runs": 182,
     "alphabet_status": {
       "alphabet_1": {
         "letters": [
@@ -149,6 +149,7 @@
           "F",
           "G",
           "H",
+          "K",
           "L",
           "M",
           "P",
@@ -158,14 +159,13 @@
           "W",
           "Y"
         ],
-        "completed": 14,
+        "completed": 15,
         "total": 25,
         "remaining": [
           "D",
           "E",
           "I",
           "J",
-          "K",
           "N",
           "O",
           "Q",
@@ -178,7 +178,6 @@
           "E": 1,
           "I": 1,
           "J": 1,
-          "K": 1,
           "N": 1,
           "O": 1,
           "Q": 1,
@@ -228,7 +227,7 @@
           "H": 1,
           "I": 2,
           "J": 2,
-          "K": 2,
+          "K": 1,
           "L": 1,
           "N": 2,
           "O": 2,
@@ -246,6 +245,7 @@
       "T": 8,
       "A": 5,
       "O": 4,
+      "K": 5,
       "Y": 5,
       "F": 5,
       "V": 5,
@@ -264,7 +264,6 @@
       "Q": 4,
       "H": 5,
       "M": 7,
-      "K": 4,
       "W": 7,
       "C": 13,
       "E": 4
@@ -292,6 +291,13 @@
         "Old Deer Park",
         "Ormeau",
         "Oxford"
+      ],
+      "K": [
+        "Kilkenny Lane Country",
+        "Killerton",
+        "King George V Playing Field",
+        "Kingsbury Water",
+        "Kingsway"
       ],
       "Y": [
         "Y Promen\u00e2d",
@@ -427,12 +433,6 @@
         "Mole Valley",
         "Mortimer Forest"
       ],
-      "K": [
-        "Kilkenny Lane Country",
-        "Killerton",
-        "King George V Playing Field",
-        "Kingsway"
-      ],
       "W": [
         "Walsall Arboretum",
         "Warwick Racecourse",
@@ -464,13 +464,13 @@
         "Evesham"
       ]
     },
-    "last_updated": "2026-10-06T21:19:27.658763"
+    "last_updated": "2026-10-11T08:12:21.464769"
   },
   "2475659": {
     "name": "Beth",
     "athlete_id": "2475659",
     "location": "Cheltenham",
-    "total_runs": 232,
+    "total_runs": 233,
     "alphabet_status": {
       "alphabet_1": {
         "letters": [
@@ -615,6 +615,7 @@
           "D",
           "G",
           "H",
+          "K",
           "L",
           "M",
           "S",
@@ -623,7 +624,7 @@
           "W",
           "Y"
         ],
-        "completed": 12,
+        "completed": 13,
         "total": 25,
         "remaining": [
           "A",
@@ -631,7 +632,6 @@
           "F",
           "I",
           "J",
-          "K",
           "N",
           "O",
           "P",
@@ -646,7 +646,6 @@
           "F": 1,
           "I": 1,
           "J": 1,
-          "K": 1,
           "N": 1,
           "O": 1,
           "P": 1,
@@ -696,7 +695,7 @@
           "F": 2,
           "I": 2,
           "J": 2,
-          "K": 2,
+          "K": 1,
           "L": 1,
           "N": 2,
           "O": 2,
@@ -715,6 +714,7 @@
       "T": 7,
       "A": 4,
       "O": 4,
+      "K": 5,
       "Y": 5,
       "D": 5,
       "S": 11,
@@ -733,7 +733,6 @@
       "H": 6,
       "W": 12,
       "F": 4,
-      "K": 4,
       "C": 12,
       "E": 4,
       "M": 6
@@ -759,6 +758,13 @@
         "Old Deer Park",
         "Ormeau",
         "Oxford"
+      ],
+      "K": [
+        "Kilkenny Lane Country",
+        "King George V Playing Field",
+        "Kingsbury Water",
+        "Kingston",
+        "Kingsway"
       ],
       "Y": [
         "Y Promen\u00e2d",
@@ -899,12 +905,6 @@
         "Forest of Dean",
         "Fulham Palace"
       ],
-      "K": [
-        "Kilkenny Lane Country",
-        "King George V Playing Field",
-        "Kingston",
-        "Kingsway"
-      ],
       "C": [
         "Cannon Hill",
         "Cardiff",
@@ -934,6 +934,6 @@
         "Mole Valley"
       ]
     },
-    "last_updated": "2026-10-06T21:19:27.659489"
+    "last_updated": "2026-10-11T08:12:56.787942"
   }
 }
